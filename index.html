@@ -106,7 +106,9 @@ function sum(a,f){return a.reduce(function(s,l){return s+f(l)},0)}
 function go(){S.planned=true;var rows=S.lines.filter(function(l){return l.mine});
 if(!rows.length){G('out').innerHTML='<div class="card w">Não há linhas escolhidas.</div>';return}
 var ls=mkLanes(bund(rows)),fl=ls.slice(),top=[],wn=[],sw=function(){return sum(fl,function(l){return l.w})};
-if(sw()>W-2){var hh=fl.map(function(l){return l.h}).sort(function(a,b){return a-b}),md=hh[Math.floor(hh.length/2)];fl.sort(function(a,b){return b.rk-a.rk||Math.abs(b.h-md)-Math.abs(a.h-md)||b.kg-a.kg});while(fl.length>1&&sw()>W-2)top.push(fl.shift())}
+if(sw()>W-2){var hh=fl.map(function(l){return l.h}).sort(function(a,b){return a-b}),md=hh[Math.floor(hh.length/2)];fl.sort(function(a,b){return b.rk-a.rk||Math.abs(b.h-md)-Math.abs(a.h-md)||a.items.length-b.items.length||b.kg-a.kg});while(fl.length>1&&sw()>W-2)top.push(fl.shift())}
+function stat(l){l.len=sum(l.items,function(b){return b.L});l.w=Math.max.apply(0,l.items.map(function(b){return b.w}));l.h=Math.max.apply(0,l.items.map(function(b){return b.h}));l.kg=sum(l.items,function(b){return b.kg})}
+for(var mv=1;mv;){mv=0;fl.forEach(function(F){if(mv)return;top.forEach(function(Tl){if(mv)return;Tl.items.forEach(function(it,ci){if(mv)return;if(F.len+it.L<=LT&&it.w<=F.w+1&&Math.abs(F.h-it.h)<=6){Tl.items.splice(ci,1);F.items.push(it);stat(F);if(Tl.items.length)stat(Tl);else top.splice(top.indexOf(Tl),1);mv=1}})})})}
 var tw0=sw();if(tw0>W)wn.push('Não cabe na largura do camião.');
 fl.sort(function(a,b){return a.h-b.h});var arr=[fl.shift()],wl=0,wr=0;fl.forEach(function(l){if(wr<wl){arr.push(l);wr+=l.kg}else{arr.unshift(l);wl+=l.kg}});
 var x=(W-tw0)/2,mg=x;arr.forEach(function(l){l.x=x;x+=l.w});
