@@ -20,7 +20,7 @@ button{background:var(--card);color:var(--fg);border:1px solid var(--bd);border-
 svg{width:100%;height:auto;display:block;background:var(--card);border:1px solid var(--bd);border-radius:12px}
 .bd{stroke:var(--fg);stroke-width:.5;cursor:pointer}.done{opacity:.4}
 text{fill:var(--fg);font-size:6.3px;pointer-events:none;text-anchor:middle}
-.sv{width:var(--sw,100%);max-width:100%}.lays{display:flex;flex-wrap:wrap;gap:0 16px;align-items:flex-start}.big{display:block;width:100%;padding:16px;font-size:17px;margin:8px 0}.tb{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px}td,th{padding:5px 6px;border-bottom:1px solid var(--bd);text-align:left;white-space:nowrap}
+.sv{width:var(--sw,100%);max-width:100%}.lays{display:flex;flex-wrap:wrap;gap:0 16px;align-items:flex-start}.big{display:block;width:100%;padding:16px;font-size:17px;margin:8px 0}.btn{display:inline-block;background:var(--card);color:var(--fg);border:1px solid var(--bd);border-radius:8px;padding:7px 11px;margin:3px 3px 3px 0;font-size:15px}.tb{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px}td,th{padding:5px 6px;border-bottom:1px solid var(--bd);text-align:left;white-space:nowrap}
 </style></head><body>
 <h1>Carga</h1>
 <div id="menu"><div class="card"><button class="p big" data-nav="map">Ler mapa e calcular a carga</button><button class="big" data-nav="db">Base de dados dos atados</button></div></div>
@@ -28,10 +28,11 @@ text{fill:var(--fg);font-size:6.3px;pointer-events:none;text-anchor:middle}
 <div id="scrDb" style="display:none"></div>
 <div id="scrMap" style="display:none">
 <div class="card"><b>Foto do mapa</b><br>
-<input type="file" id="f" accept="image/*"><button id="ocr" class="p">Ler mapa</button>
+<input type="file" id="f" accept="image/*"><br><label class="btn">📷 Tirar foto<input type="file" id="fc" accept="image/*" capture="environment" style="display:none"></label><button id="ocr" class="p">Ler mapa</button>
 <div id="st" class="m"></div>
 <details id="rawd" style="display:none"><summary class="m">Texto lido (ajuda a corrigir)</summary><pre id="raw" class="m" style="white-space:pre-wrap"></pre></details>
 <img id="pv" alt="" style="display:none;width:100%;border-radius:8px;margin-top:8px"></div>
+<div class="card"><b>Procurar na base de dados</b><br><input id="q" style="width:100%;box-sizing:border-box" placeholder="ex.: 100x100, 120x60, Ø88,9"><div id="qr"></div></div>
 <div class="card"><b>Ou escreve uma linha</b>
 <label style="display:block">Descrição<br><input id="d" placeholder="ex. TUBO QUAD 60,0 x 4,00 S355J2H"></label>
 <label>Comp. (m)<br><input id="c" type="number" step="any" inputmode="decimal"></label>
@@ -125,6 +126,7 @@ else{var bd=1e9;for(W=1;W<=60;W++)for(N=1;N<=W;N++)if(hx(N,W)==n){var r=2*(W-N)+
 if(best&&!c){var hh=2*(best[1]-best[0])*.866+1;if(Math.max(best[1],hh)/Math.min(best[1],hh)>1.6)best=null}
 if(best){N=best[0];W=best[1];rows=2*(W-N)+1}else{W=c?Math.max(c[0],c[1]):Math.max(1,Math.round(Math.sqrt(n/.866)));rows=Math.ceil(n/(W-.5));N=0}
 return[Math.round(W*a*10)/10,Math.round(((rows-1)*.866+1)*a*10)/10,N,W]}
+var LF=null;
 function find(i){return S.lines.filter(function(l){return l.id==i})[0]}
 function syncOrder(){var u=[];S.lines.forEach(function(l){if(l.mine&&u.indexOf(l.loc)<0)u.push(l.loc)});S.order=S.order.filter(function(x){return u.indexOf(x)>=0});u.forEach(function(x){if(S.order.indexOf(x)<0)S.order.push(x)})}
 G('add').onclick=function(){var p=parse(G('d').value);if(!p){G('er').textContent='Não percebi a descrição. Ex.: TUBO QUAD 60,0 x 4,00 | TUBO RECT 120x60x8 | TUBO RED 114,3x3';return}
@@ -132,37 +134,47 @@ var l=Object.assign(p,{id:S.nid++,comp:nm(G('c').value),pecas:nm(G('p').value),a
 if(!l.comp||!l.pecas||!l.kg){G('er').textContent='Faltam comprimento, peças ou peso.';return}
 G('er').textContent='';S.lines.push(l);['d','c','p','at','k'].forEach(function(i){G(i).value=''});rl()};
 function loadT(){return window.Tesseract?Promise.resolve():new Promise(function(ok,no){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';s.onload=ok;s.onerror=function(){no(new Error('Sem internet para carregar o leitor (só é preciso da primeira vez).'))};document.head.appendChild(s)})}
-function prep(f){return createImageBitmap(f).then(function(b){var k=Math.min(2,2400/Math.max(b.width,b.height)),c=document.createElement('canvas');c.width=Math.round(b.width*k);c.height=Math.round(b.height*k);var x=c.getContext('2d');x.filter='grayscale(1) contrast(1.5)';x.drawImage(b,0,0,c.width,c.height);return c})}
-function ocrLines(t){var L=t.split('\n'),n=0;
-for(var i=0;i<L.length;i++){var s=L[i],m=s.match(/(\d[\d.,]*)\s+TUBO\s+(?:RECT|QUAD|RED)/i);if(!m)continue;
-var tail=s.slice(s.search(/TUBO/i)),p=parse(tail),cm=tail.match(/\b(\d{1,2})[.,]000\b/);if(!p||!cm)continue;
-var rest=tail.slice(tail.indexOf(cm[0])+cm[0].length).match(/\d[\d.,]*/g)||[],pc=parseInt((rest[0]||'').replace(/[.,]/g,'')),kg=parseInt((rest[1]||'').replace(/[.,]/g,'')),loc='';
+function prep(f){return createImageBitmap(f).catch(function(){throw new Error('Não consegui abrir esta foto. Tira uma foto nova com o botão da câmara, ou escolhe-a em Ficheiros em vez de Fotos.')}).then(function(b){var k=Math.min(2,2400/Math.max(b.width,b.height)),c=document.createElement('canvas');c.width=Math.round(b.width*k);c.height=Math.round(b.height*k);var x=c.getContext('2d');x.filter='grayscale(1) contrast(1.5)';x.drawImage(b,0,0,c.width,c.height);return c})}
+function ocrLines(t){var L=t.split('\n'),n=0,miss=[];
+for(var i=0;i<L.length;i++){var s=L[i];if(!/TUBO/i.test(s))continue;var tail=s.slice(s.search(/TUBO/i)),m=s.match(/(\d[\d.,]*)\s+TUBO/i),p=parse(tail),cm=tail.match(/\b(\d{1,2})[.,]000\b/);
+if(!p||!cm||!m){miss.push(tail);continue}
+var rest=tail.slice(tail.indexOf(cm[0])+cm[0].length).match(/\d[\d.,]*/g)||[],pz=parseInt((rest[0]||'').replace(/[.,]/g,'')),kg=parseInt((rest[1]||'').replace(/[.,]/g,'')),loc='';
 for(var j=i;j<Math.min(L.length,i+3);j++){var q=L[j].match(/LOCALIZ\S*[^A-Za-z0-9]*([A-Za-z0-9]{4,7})/i);if(q){loc=q[1].toUpperCase().replace(/O/g,'0').replace(/I/g,'1');break}}
-if(!pc||!kg)continue;
-S.lines.push(Object.assign(p,{id:S.nid++,comp:+cm[1],pecas:pc,atados:nm(m[1].replace(/\./g,''))||1,kg:kg,loc:loc,mine:false,B:0,A:0,rot:false}));n++}
-rl();return n}
-G('ocr').onclick=async function(){var f=G('f').files[0];if(!f){G('st').textContent='Escolhe primeiro a foto do mapa.';return}
+if(!pz||!kg){miss.push(tail);continue}
+S.lines.push(Object.assign(p,{id:S.nid++,comp:+cm[1],pecas:pz,atados:nm(m[1].replace(/\./g,''))||1,kg:kg,loc:loc,mine:false,B:0,A:0,rot:false}));n++}
+rl();return{n:n,miss:miss}}
+function kgm(tp,a,b,e){return(tp=='RED'?Math.PI*e*(a-e):2*e*(a+b-2*e))*0.00785}
+function qs(v){var q=v.toLowerCase().replace(/,/g,'.').replace(/[øⵀ⌀]/g,'').replace(/\s+/g,''),r=G('qr');if(!q){r.innerHTML='';return}
+var ks=Object.keys(DB).filter(function(k){return k==q||k.split('x').indexOf(q)>=0||k.indexOf(q)==0||(q.indexOf('x')>0&&k==q.split('x').sort(function(a,b){return b-a}).join('x'))}).slice(0,8);
+r.innerHTML=ks.length?ks.map(function(k){return '<button data-a="qpick" data-k="'+k+'">'+(k.indexOf('x')<0?'Ø'+k:k)+'</button>'}).join(''):'<div class="m">Nada encontrado.</div>'}
+function qform(k){G('qr').innerHTML='<div class="r"><b>'+(k.indexOf('x')<0?'Ø'+k:k)+'</b><br><label>Espessura (mm)<br><select id="qe">'+[1.5,2,2.5,3,4,5,6,8].map(function(e){return '<option>'+e+'</option>'}).join('')+'</select></label> <label>Comp. (m)<br><select id="ql"><option>6</option><option>12</option></select></label> <label>Atados<br><input id="qa" type="number" value="1"></label> <label>Local<br><input id="qlo" placeholder="F01B04"></label><br><button class="p" data-a="qadd" data-k="'+k+'">Adicionar à carga</button><div id="qm" class="w"></div></div>'}
+function qadd(k){var R=k.indexOf('x')<0,p=k.split('x').map(Number),e=+G('qe').value,L=+G('ql').value,at=+G('qa').value||1,c=e<=2?0:e<=3?1:e<=4?2:e<=5?3:e<=6?4:5,v=pc(cell(k,L==6?0:1,c));
+if(!v){G('qm').textContent='Não há configuração na base de dados para esta espessura e comprimento.';return}
+var a=p[0],b=R?a:p[1],tp=R?'RED':(a==b?'QUAD':'RECT'),n=v[0]*at;
+S.lines.push({tipo:tp,a:a,b:b,esp:e,comp:L,pecas:n,atados:at,kg:Math.round(n*kgm(tp,a,b,e)*L),loc:G('qlo').value.trim().toUpperCase(),id:S.nid++,mine:true,B:0,A:0,rot:false,est:true});
+G('q').value='';G('qr').innerHTML='<div class="m">Adicionado (peso estimado, marcado com ~).</div>';rl()}
+G('ocr').onclick=async function(){var f=LF||G('f').files[0];if(!f){G('st').textContent='Escolhe primeiro a foto do mapa.';return}
 G('pv').src=URL.createObjectURL(f);G('pv').style.display='block';
 try{G('st').textContent='A preparar o leitor...';await loadT();var c=await prep(f);
 var w=await Tesseract.createWorker('por',1,{logger:function(m){if(m.status)G('st').textContent=m.status+(m.progress?' '+Math.round(m.progress*100)+'%':'')}});
 await w.setParameters({tessedit_pageseg_mode:'6'});var r=await w.recognize(c);await w.terminate();
-G('raw').textContent=r.data.text;G('rawd').style.display='block';var n=ocrLines(r.data.text);
-G('st').textContent=n?('Li '+n+' linhas. Marca as que são tuas e confere os números.'):'Não consegui ler linhas. Vê o texto lido ou escreve à mão.'}
+G('raw').textContent=r.data.text;G('rawd').style.display='block';var o=ocrLines(r.data.text);
+G('st').textContent=(o.n?('Li '+o.n+' linhas. Marca as que são tuas e confere os números.'):'Não consegui ler linhas.')+(o.miss.length?' Não consegui ler '+o.miss.length+' linha(s): "'+o.miss.join('" | "')+'". Está preenchida a primeira em "Ou escreve uma linha"; vê também o texto lido.':'');if(o.miss.length)G('d').value=o.miss[0]}
 catch(e){G('st').textContent='Erro: '+(e.message||e)}};
 G('clr').onclick=function(){if(confirm('Apagar as linhas e o plano deste mapa? (as configurações guardadas ficam)')){S.lines=[];S.order=[];S.done={};S.planned=false;rl();G('out').innerHTML='';G('pv').style.display='none';G('rawd').style.display='none';G('st').textContent=''}};
 function rl(){syncOrder();var h='<h2>2. Linhas</h2><div class="card"><div class="m">Marca as linhas que são tuas (as que têm T2, 130, G ou C escrito à mão).</div><button data-a="all">Marcar todas</button>';
-S.lines.forEach(function(l){var d=dims(l),i=l.id;h+='<div class="r"><label><input type="checkbox" data-a="mine" data-i="'+i+'"'+(l.mine?' checked':'')+'> <b>'+lab(l)+'</b></label><span class="m">'+l.comp+' m · '+l.pecas+' peças · '+l.atados+' atados · '+fmt(l.kg)+' kg · '+(l.loc||'sem local')+'</span><br>'+
+S.lines.forEach(function(l){var d=dims(l),i=l.id;h+='<div class="r"><label><input type="checkbox" data-a="mine" data-i="'+i+'"'+(l.mine?' checked':'')+'> <b>'+lab(l)+'</b></label><span class="m">'+l.comp+' m · '+l.pecas+' peças · '+l.atados+' atados · '+(l.est?'~':'')+fmt(l.kg)+' kg · '+(l.loc||'sem local')+'</span><br>'+
 'Config B<input type="number" data-a="B" data-i="'+i+'" placeholder="'+(d.B||'?')+'" value="'+(l.B||'')+'"> A<input type="number" data-a="A" data-i="'+i+'" placeholder="'+(d.A||'?')+'" value="'+(l.A||'')+'"> <label><input type="checkbox" data-a="rot" data-i="'+i+'"'+(l.rot?' checked':'')+'> virar</label><button data-a="star" data-i="'+i+'" title="Guardar esta configuração como padrão para este tubo">★ padrão</button><button data-a="del" data-i="'+i+'">✕</button> <span class="m">'+d.w+'×'+d.h+' cm · '+d.src+'</span></div>'});
 G('L').innerHTML=S.lines.length?h+'</div>':'';
 var c='<h2>3. Ordem das localizações</h2><div class="card"><label><input type="checkbox" data-a="ord"'+(S.useOrd?' checked':'')+'> Usar a ordem das localizações</label>'+(S.useOrd?'<div class="m">A 1.ª é a primeira a carregar (vai para o lastro).</div>':'');
 if(S.useOrd)S.order.forEach(function(x,i){c+='<div class="r">'+(i+1)+'. <b>'+(x||'(sem local)')+'</b> <button data-a="up" data-j="'+i+'">▲</button><button data-a="dn" data-j="'+i+'">▼</button></div>'});
 G('LC').innerHTML=S.order.length?c+'</div>':'';sv();if(S.planned)go()}
-document.addEventListener('change',function(e){var t=e.target,a=t.getAttribute('data-a');if(t.className=='dc'){dbEdit(t);return}if(a=='dsel'){dbr();return}if(!a)return;if(a=='ord'){S.useOrd=t.checked;rl();return}var l=find(t.getAttribute('data-i'));if(!l)return;
+document.addEventListener('change',function(e){var t=e.target,a=t.getAttribute('data-a');if(t.id=='f'||t.id=='fc'){LF=t.files[0]||null;G('st').textContent=LF?'Foto escolhida: '+LF.name:'';return}if(t.className=='dc'){dbEdit(t);return}if(a=='dsel'){dbr();return}if(!a)return;if(a=='ord'){S.useOrd=t.checked;rl();return}var l=find(t.getAttribute('data-i'));if(!l)return;
 if(a=='mine')l.mine=t.checked;else if(a=='rot')l.rot=t.checked;else if(a=='B'||a=='A')l[a]=Math.max(0,Math.round(nm(t.value)));rl()});
 document.addEventListener('click',function(e){var t=e.target,a=t.getAttribute&&t.getAttribute('data-a'),id=t.getAttribute&&t.getAttribute('data-id');
 if(t.getAttribute&&t.getAttribute('data-nav')){nav(t.getAttribute('data-nav'));return}
 if(id){S.done[id]=!S.done[id];sv();draw();return}
-if(!a)return;if(a=='dbreset'){if(confirm('Repor todos os valores originais da tabela?')){S.dbe={};sv();dbr()}return}
+if(!a)return;if(a=='qpick'){qform(t.getAttribute('data-k'));return}if(a=='qadd'){qadd(t.getAttribute('data-k'));return}if(a=='dbreset'){if(confirm('Repor todos os valores originais da tabela?')){S.dbe={};sv();dbr()}return}
 var l=find(t.getAttribute('data-i'));
 if(a=='del'&&l)S.lines=S.lines.filter(function(x){return x!==l});
 else if(a=='all'){S.lines.forEach(function(l){l.mine=true})}
@@ -209,7 +221,7 @@ if(P.bat&&l==0)s+='<rect x="'+P.sx+'" y="0" width="'+P.bat+'" height="'+LT+'" fi
 return s+'</svg>'}
 function draw(){G('s0').innerHTML=svg(0);if(G('s1'))G('s1').innerHTML=svg(1)}
 function zv(){return S.zoom||(innerWidth<700?Math.max(120,innerWidth-28):260)}
-document.addEventListener('input',function(e){if(e.target.id=='zm'){S.zoom=+e.target.value;document.documentElement.style.setProperty('--sw',S.zoom+'px');sv()}});
+document.addEventListener('input',function(e){if(e.target.id=='q')qs(e.target.value);if(e.target.id=='zm'){S.zoom=+e.target.value;document.documentElement.style.setProperty('--sw',S.zoom+'px');sv()}});
 document.documentElement.style.setProperty('--sw',zv()+'px');
 G('go').onclick=go;rl();nav('menu');
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(function(){});
