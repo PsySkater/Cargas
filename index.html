@@ -20,9 +20,13 @@ button{background:var(--card);color:var(--fg);border:1px solid var(--bd);border-
 svg{width:100%;height:auto;display:block;background:var(--card);border:1px solid var(--bd);border-radius:12px}
 .bd{stroke:var(--fg);stroke-width:.5;cursor:pointer}.done{opacity:.4}
 text{fill:var(--fg);font-size:6.3px;pointer-events:none;text-anchor:middle}
-.sv{width:var(--sw,100%);max-width:100%}.lays{display:flex;flex-wrap:wrap;gap:0 16px;align-items:flex-start}.tb{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px}td,th{padding:5px 6px;border-bottom:1px solid var(--bd);text-align:left;white-space:nowrap}
+.sv{width:var(--sw,100%);max-width:100%}.lays{display:flex;flex-wrap:wrap;gap:0 16px;align-items:flex-start}.big{display:block;width:100%;padding:16px;font-size:17px;margin:8px 0}.tb{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px}td,th{padding:5px 6px;border-bottom:1px solid var(--bd);text-align:left;white-space:nowrap}
 </style></head><body>
 <h1>Carga</h1>
+<div id="menu"><div class="card"><button class="p big" data-nav="map">Ler mapa e calcular a carga</button><button class="big" data-nav="db">Base de dados dos atados</button></div></div>
+<div id="bar" style="display:none"><button data-nav="menu">← Menu</button></div>
+<div id="scrDb" style="display:none"></div>
+<div id="scrMap" style="display:none">
 <div class="card"><b>Foto do mapa</b><br>
 <input type="file" id="f" accept="image/*"><button id="ocr" class="p">Ler mapa</button>
 <div id="st" class="m"></div>
@@ -38,9 +42,9 @@ text{fill:var(--fg);font-size:6.3px;pointer-events:none;text-anchor:middle}
 <button id="add" class="p">Adicionar linha</button><div id="er" class="w"></div></div>
 <div id="L"></div><div id="LC"></div>
 <button id="go" class="p">Gerar plano</button><button id="clr">Limpar mapa</button>
-<div id="out"></div>
+<div id="out"></div></div>
 <script>
-var S={lines:[],order:[],defs:{},done:{},nid:1,planned:false,useOrd:true,zoom:0},O=[],LT=1360,W=245;
+var S={lines:[],order:[],defs:{},done:{},nid:1,planned:false,useOrd:true,zoom:0,dbe:{}},O=[],LT=1360,W=244;
 try{S=Object.assign(S,JSON.parse(localStorage.getItem('carga1')||'{}'))}catch(e){}
 function sv(){try{localStorage.setItem('carga1',JSON.stringify(S))}catch(e){}}
 var G=function(i){return document.getElementById(i)},nm=function(x){return parseFloat(String(x).replace(',','.'))||0};
@@ -52,11 +56,75 @@ if(/QUAD/.test(s)&&(m=s.match(/QUAD\D*?([\d.]+)\s*X\s*([\d.]+)/)))return{tipo:'Q
 function lab(l){return l.tipo+' '+l.a+'×'+(l.tipo=='RECT'?l.b+'×':'')+l.esp}
 function key(l){return l.tipo+l.a+'x'+l.b+'x'+l.esp+'/'+l.comp}
 function nb(l){return Math.max(1,Math.ceil(l.atados-1e-6))}
-function dims(l){var n=Math.max(1,Math.round(l.pecas/nb(l))),c=(l.B&&l.A)?[l.B,l.A]:S.defs[key(l)],a=l.a/10,b=l.b/10,B,A,w,h,R=l.tipo=='RED';
-if(c){B=c[0];A=c[1];w=B*(R?a:Math.max(a,b));h=A*(R?a*.87:Math.min(a,b))}
-else if(R){w=h=a*Math.sqrt(.866*n);B=A=0}
+function dims(l){var n=Math.max(1,Math.round(l.pecas/nb(l))),tc=tcell(l),c=null,src='estimado',a=l.a/10,b=l.b/10,B,A,w,h,R=l.tipo=='RED';if(l.B&&l.A){c=[l.B,l.A];src='manual'}else if(S.defs[key(l)]){c=S.defs[key(l)];src='padrão'}else if(tc&&tc[0]==n){c=[tc[1],tc[2]];src='tabela'}else if(tc)src='estimado (tabela: '+tc[0]+' peças)';
+if(R){var rd=rdim(n,a,c);w=rd[0];h=rd[1];B=c?c[0]:rd[2];A=c?c[1]:rd[3]}
+else if(c){B=c[0];A=c[1];w=B*Math.max(a,b);h=A*Math.min(a,b)}
 else{var bg=Math.max(a,b),sl=Math.min(a,b),best=1e9;B=1;A=n;for(var i=1;i<=n;i++){if(n%i)continue;var j=n/i,d=Math.abs(i*bg-j*sl);if(d<best-1e-9){best=d;B=i;A=j}}w=B*bg;h=A*sl}
-w=Math.round(w);h=Math.round(h);if(l.rot){var t=w;w=h;h=t}return{w:w,h:h,B:B,A:A}}
+w=Math.round(w);h=Math.round(h);if(l.rot){var t=w;w=h;h=t}return{w:w,h:h,B:B,A:A,src:src}}
+var DB0=`40x40|121/11x11,121/11x11,64/8x8,64/8x8,,|49/7x7,49/7x7,36/6x6,30/6x5,,
+45x35|80/8x10,80/8x10,80/8x10,64/8x8,,|48/6x8,48/6x8,48/6x8,36/6x6,,
+50x30|120/8x15,120/8x15,80/8x10,64/8x8,,|48/6x8,48/6x8,48/6x8,36/6x6,,
+50x50|81/9x9,81/9x9,64/8x8,49/7x7,36/6x6,|36/6x6,36/6x6,30/6x5,25/5x5,20/5x4,
+60x40|88/8x11,88/8x11,54/6x9,48/6x8,48/6x8,|40/5x8,40/5x8,24/4x6,24/4x6,24/4x6,
+70x30|84/6x14,84/6x14,54/6x9,50/5x10,,|48/6x8,48/6x8,24/4x6,24/3x8,,
+70x35|72/6x12,72/6x12,50/5x10,40/5x8,40/5x8,|32/4x8,32/4x8,32/4x8,20/4x5,20/4x5,
+70x40|72/6x12,72/6x12,40/5x8,40/5x8,40/5x8,|36/6x6,36/6x6,20/4x5,20/4x5,20/4x5,
+60x50|72/6x12,72/6x12,42/6x7,48/6x8,40/5x8,|36/6x6,36/6x6,20/4x5,24/4x6,20/4x5,
+60x60|64/8x8,64/8x8,42/6x7,36/6x6,30/5x6,16/4x4|32/8x4,32/8x4,18/6x3,16/4x4,16/4x4,8/4x2
+70x50|48/6x8,48/6x8,48/6x8,40/5x8,35/5x7,16/4x4|25/5x5,25/5x5,25/5x5,18/3x6,18/3x6,9/3x3
+80x40|72/6x12,72/6x12,50/5x10,32/4x8,32/4x8,|32/4x8,32/4x8,24/4x6,18/3x6,16/4x4,
+75x50|60/6x10,60/6x10,40/5x8,32/4x8,25/5x5,15/3x5|30/5x6,30/5x6,24/4x6,20/4x5,20/4x5,9/3x3
+80x50|60/6x10,60/6x10,40/5x8,32/4x8,32/4x8,18/3x6|30/5x6,30/5x6,30/5x6,16/4x4,16/4x4,9/3x3
+70x70|49/7x7,49/7x7,49/7x7,25/5x5,25/5x5,16/4x4|25/5x5,25/5x5,25/5x5,16/4x4,16/4x4,12/4x3
+80x60|42/6x7,42/6x7,42/6x7,24/4x6,24/4x6,18/3x6|24/4x6,24/4x6,24/4x6,12/3x4,12/3x4,9/3x3
+90x50|50/5x10,50/5x10,40/5x8,35/5x7,24/4x6,15/3x5|28/4x7,28/4x7,20/4x5,15/3x5,12/3x4,9/3x3
+100x40|55/5x11,55/5x11,40/4x10,36/4x9,24/4x6,|25/5x5,25/5x5,20/4x5,18/3x6,15/3x5,
+100x50|50/5x10,50/5x10,36/4x9,18/3x6,18/3x6,18/3x6|25/5x5,25/5x5,18/3x6,12/3x4,12/3x4,9/3x3
+76x76|36/6x6,36/6x6,36/6x6,36/6x6,30/6x5,25/5x5|20/5x4,20/5x4,16/4x4,16/4x4,16/4x4,9/3x3
+80x80|36/6x6,36/6x6,36/6x6,25/5x5,16/4x4,16/4x4|18/6x3,18/6x3,18/6x3,15/5x3,9/3x3,8/4x2
+100x60|35/5x7,35/5x7,35/5x7,24/4x6,15/3x5,15/3x5|20/4x5,20/4x5,20/4x5,12/3x4,9/3x3,9/3x3
+120x40|30/3x10,30/3x10,30/3x10,30/3x10,24/3x8,|15/3x5,15/3x5,15/3x5,15/3x5,12/2x6,
+100x70|32/4x8,32/4x8,32/4x8,24/3x8,24/3x8,15/3x5|16/4x4,16/4x4,16/4x4,8/2x4,12/3x4,8/2x4
+120x50|40/4x10,40/4x10,32/4x8,24/3x8,24/3x8,10/2x5|18/3x6,18/3x6,18/3x6,15/3x5,12/3x4,8/2x4
+90x90|36/6x6,36/6x6,36/6x6,16/4x4,16/4x4,9/3x3|16/4x4,16/4x4,16/4x4,9/3x3,9/3x3,9/3x3
+100x80|30/5x6,30/5x6,30/5x6,20/4x5,20/4x5,16/4x4|16/4x4,16/4x4,16/4x4,12/3x4,9/3x3,9/3x3
+120x60|32/4x8,32/4x8,32/4x8,18/3x6,18/3x6,18/3x6|18/3x6,18/3x6,16/4x4,8/2x4,8/2x4,9/3x3
+140x40|30/3x10,30/3x10,30/3x10,21/3x7,24/3x8,|18/3x6,18/3x6,18/3x6,12/2x6,12/2x6,
+100x100|25/5x5,25/5x5,25/5x5,20/4x5,20/4x5,15/3x5|12/4x3,12/4x3,12/4x3,12/4x3,12/4x3,9/3x3
+120x80|20/4x5,20/4x5,24/4x6,25/5x5,25/5x5,16/4x4|16/4x4,16/4x4,16/4x4,12/4x3,12/4x3,9/3x3
+140x60|24/4x6,24/4x6,24/4x6,24/4x6,24/4x6,18/3x6|20/4x5,20/4x5,15/3x5,16/4x4,12/3x4,9/3x3
+150x50|27/3x9,27/3x9,27/3x9,27/3x9,20/4x5,12/3x4|16/2x8,16/2x8,16/2x8,16/2x8,12/3x4,9/3x3
+48.3|91/6x11,91/6x11,61/5x9,61/5x9,37/4x7,|37/4x7,37/4x7,37/4x7,37/4x7,19/3x5,
+50|91/6x11,91/6x11,61/5x9,61/5x9,37/4x7,37/4x7|37/4x7,37/4x7,37/4x7,37/4x7,19/3x5,19/3x5
+60.3|61/5x9,61/5x9,61/5x9,37/4x7,37/4x7,19/3x5|37/4x7,37/4x7,37/4x7,19/3x5,19/3x5,19/3x5
+63.5|61/5x9,61/5x9,61/5x9,37/4x7,37/4x7,19/3x5|37/4x7,37/4x7,37/4x7,19/3x5,19/3x5,10/3x4
+65|61/5x9,61/5x9,61/5x9,37/4x7,37/4x7,19/3x5|37/4x7,37/4x7,37/4x7,19/3x5,19/3x5,10/3x4
+70|37/4x7,37/4x7,37/4x7,37/4x7,37/4x7,19/3x5|37/4x7,37/4x7,19/3x5,19/3x5,19/3x5,14/4x3
+76.1|37/4x7,37/4x7,37/4x7,37/4x7,37/4x7,19/3x5|37/4x7,37/4x7,19/3x5,19/3x5,19/3x5,10/3x4
+88.9|19/3x5,19/3x5,19/3x5,19/3x5,19/3x5,19/3x5|19/3x5,19/3x5,19/3x5,10/3x4,10/3x4,10/3x4
+101.6|19/3x5,19/3x5,19/3x5,19/3x5,19/3x5,19/3x5|19/3x5,19/3x5,10/3x4,10/3x4,10/3x4,10/3x4
+108|19/3x5,19/3x5,19/3x5,19/3x5,19/3x5,10/3x4|19/3x5,19/3x5,10/3x4,10/3x4,10/3x4,10/3x4
+114.3|19/3x5,19/3x5,19/3x5,19/3x5,19/3x5,19/3x5|19/3x5,19/3x5,19/3x5,10/3x4,10/3x4,10/3x4
+120|19/3x5,19/3x5,19/3x5,19/3x5,10/3x4,14/4x3|19/3x5,19/3x5,10/3x4,10/3x4,10/3x4,7/2x3
+127|14/4x3,14/4x3,14/4x3,14/4x3,14/4x3,10/3x4|14/4x3,14/4x3,14/4x3,10/3x4,10/3x4,10/3x4`,DB={},COLS=['até 2','2,5 a 3','4','5','6','8'];
+DB0.split('\n').forEach(function(r){var p=r.split('|');DB[p[0]]=[p[1].split(','),p[2].split(',')]});
+function cell(d,li,c){var e=S.dbe[d+'|'+li+'|'+c];return e!==undefined?e:DB[d][li][c]}
+function pc(v){var m=/^(\d+)\/(\d+)x(\d+)$/.exec(v||'');return m?[+m[1],+m[2],+m[3]]:null}
+function dkey(l){if(l.tipo=='RED'){var d=l.a==51?50:l.a;return DB[String(d)]?String(d):null}var k=Math.max(l.a,l.b)+'x'+Math.min(l.a,l.b);return DB[k]?k:null}
+function tcell(l){var k=dkey(l);if(!k||l.esp>8)return null;var e=l.esp,c=e<=2?0:e<=3?1:e<=4?2:e<=5?3:e<=6?4:5;return pc(cell(k,l.comp<=9?0:1,c))}
+function nav(x){G('menu').style.display=x=='menu'?'block':'none';G('bar').style.display=x=='menu'?'none':'block';G('scrMap').style.display=x=='map'?'block':'none';G('scrDb').style.display=x=='db'?'block':'none';if(x=='db')dbr();if(x=='map')rl();window.scrollTo(0,0)}
+function dbr(){var cur=(G('dsel')&&DB[G('dsel').value])?G('dsel').value:'40x40',h='<div class="card"><div class="m">Peças por atado e configuração B×A para cada espessura (mm). Toca num valor para o corrigir (ex.: 32 4x8; vazio = sem configuração). Valores corrigidos ficam com a margem verde. Lidos de fotos da tabela MTM 130: os tubos redondos são os menos certos, confirma. Nos redondos o atado é um hexágono: B = tubos na fila mais estreita, A = na mais larga.</div><label>Medida <select id="dsel" data-a="dsel">'+Object.keys(DB).map(function(k){return '<option value="'+k+'"'+(k==cur?' selected':'')+'>'+(k.indexOf('x')<0?'Ø'+k:k)+'</option>'}).join('')+'</select></label>';
+[0,1].forEach(function(li){h+='<h2>'+(li?12:6)+' m</h2><div class="tb"><table><tr>'+COLS.map(function(c){return '<th>'+c+'</th>'}).join('')+'</tr><tr>'+[0,1,2,3,4,5].map(function(c){var k=cur+'|'+li+'|'+c;return '<td><input class="dc" style="width:76px'+(S.dbe[k]!==undefined?';border-color:var(--ok)':'')+'" data-k="'+k+'" value="'+cell(cur,li,c).replace('/',' ')+'"></td>'}).join('')+'</tr></table></div>'});
+G('scrDb').innerHTML=h+'<button data-a="dbreset">Repor tabela original</button></div>'}
+function dbEdit(t){var k=t.getAttribute('data-k'),p=k.split('|'),v=t.value.trim().toLowerCase().replace(/\s+/,'/');if(v&&!pc(v)){alert('Formato: peças e B×A, por exemplo 32 4x8');dbr();return}
+if(v==DB[p[0]][p[1]][p[2]])delete S.dbe[k];else S.dbe[k]=v;sv();dbr()}
+function hx(N,W){var s=W;for(var j=N;j<W;j++)s+=2*j;return s}
+function rdim(n,a,c){var best=null,W,N,rows;
+if(c){N=Math.min(c[0],c[1]);W=Math.max(c[0],c[1]);if(hx(N,W)==n)best=[N,W]}
+else{var bd=1e9;for(W=1;W<=60;W++)for(N=1;N<=W;N++)if(hx(N,W)==n){var r=2*(W-N)+1,d=Math.abs(W-((r-1)*.866+1));if(d<bd){bd=d;best=[N,W]}}}
+if(best&&!c){var hh=2*(best[1]-best[0])*.866+1;if(Math.max(best[1],hh)/Math.min(best[1],hh)>1.6)best=null}
+if(best){N=best[0];W=best[1];rows=2*(W-N)+1}else{W=c?Math.max(c[0],c[1]):Math.max(1,Math.round(Math.sqrt(n/.866)));rows=Math.ceil(n/(W-.5));N=0}
+return[Math.round(W*a*10)/10,Math.round(((rows-1)*.866+1)*a*10)/10,N,W]}
 function find(i){return S.lines.filter(function(l){return l.id==i})[0]}
 function syncOrder(){var u=[];S.lines.forEach(function(l){if(l.mine&&u.indexOf(l.loc)<0)u.push(l.loc)});S.order=S.order.filter(function(x){return u.indexOf(x)>=0});u.forEach(function(x){if(S.order.indexOf(x)<0)S.order.push(x)})}
 G('add').onclick=function(){var p=parse(G('d').value);if(!p){G('er').textContent='Não percebi a descrição. Ex.: TUBO QUAD 60,0 x 4,00 | TUBO RECT 120x60x8 | TUBO RED 114,3x3';return}
@@ -84,16 +152,18 @@ catch(e){G('st').textContent='Erro: '+(e.message||e)}};
 G('clr').onclick=function(){if(confirm('Apagar as linhas e o plano deste mapa? (as configurações guardadas ficam)')){S.lines=[];S.order=[];S.done={};S.planned=false;rl();G('out').innerHTML='';G('pv').style.display='none';G('rawd').style.display='none';G('st').textContent=''}};
 function rl(){syncOrder();var h='<h2>2. Linhas</h2><div class="card"><div class="m">Marca as linhas que são tuas (as que têm T2, 130, G ou C escrito à mão).</div><button data-a="all">Marcar todas</button>';
 S.lines.forEach(function(l){var d=dims(l),i=l.id;h+='<div class="r"><label><input type="checkbox" data-a="mine" data-i="'+i+'"'+(l.mine?' checked':'')+'> <b>'+lab(l)+'</b></label><span class="m">'+l.comp+' m · '+l.pecas+' peças · '+l.atados+' atados · '+fmt(l.kg)+' kg · '+(l.loc||'sem local')+'</span><br>'+
-'Config B<input type="number" data-a="B" data-i="'+i+'" placeholder="'+(d.B||'?')+'" value="'+(l.B||'')+'"> A<input type="number" data-a="A" data-i="'+i+'" placeholder="'+(d.A||'?')+'" value="'+(l.A||'')+'"> <label><input type="checkbox" data-a="rot" data-i="'+i+'"'+(l.rot?' checked':'')+'> virar</label><button data-a="star" data-i="'+i+'" title="Guardar esta configuração como padrão para este tubo">★ padrão</button><button data-a="del" data-i="'+i+'">✕</button> <span class="m">'+d.w+'×'+d.h+' cm</span></div>'});
+'Config B<input type="number" data-a="B" data-i="'+i+'" placeholder="'+(d.B||'?')+'" value="'+(l.B||'')+'"> A<input type="number" data-a="A" data-i="'+i+'" placeholder="'+(d.A||'?')+'" value="'+(l.A||'')+'"> <label><input type="checkbox" data-a="rot" data-i="'+i+'"'+(l.rot?' checked':'')+'> virar</label><button data-a="star" data-i="'+i+'" title="Guardar esta configuração como padrão para este tubo">★ padrão</button><button data-a="del" data-i="'+i+'">✕</button> <span class="m">'+d.w+'×'+d.h+' cm · '+d.src+'</span></div>'});
 G('L').innerHTML=S.lines.length?h+'</div>':'';
 var c='<h2>3. Ordem das localizações</h2><div class="card"><label><input type="checkbox" data-a="ord"'+(S.useOrd?' checked':'')+'> Usar a ordem das localizações</label>'+(S.useOrd?'<div class="m">A 1.ª é a primeira a carregar (vai para o lastro).</div>':'');
 if(S.useOrd)S.order.forEach(function(x,i){c+='<div class="r">'+(i+1)+'. <b>'+(x||'(sem local)')+'</b> <button data-a="up" data-j="'+i+'">▲</button><button data-a="dn" data-j="'+i+'">▼</button></div>'});
 G('LC').innerHTML=S.order.length?c+'</div>':'';sv();if(S.planned)go()}
-document.addEventListener('change',function(e){var t=e.target,a=t.getAttribute('data-a');if(!a)return;if(a=='ord'){S.useOrd=t.checked;rl();return}var l=find(t.getAttribute('data-i'));if(!l)return;
+document.addEventListener('change',function(e){var t=e.target,a=t.getAttribute('data-a');if(t.className=='dc'){dbEdit(t);return}if(a=='dsel'){dbr();return}if(!a)return;if(a=='ord'){S.useOrd=t.checked;rl();return}var l=find(t.getAttribute('data-i'));if(!l)return;
 if(a=='mine')l.mine=t.checked;else if(a=='rot')l.rot=t.checked;else if(a=='B'||a=='A')l[a]=Math.max(0,Math.round(nm(t.value)));rl()});
 document.addEventListener('click',function(e){var t=e.target,a=t.getAttribute&&t.getAttribute('data-a'),id=t.getAttribute&&t.getAttribute('data-id');
+if(t.getAttribute&&t.getAttribute('data-nav')){nav(t.getAttribute('data-nav'));return}
 if(id){S.done[id]=!S.done[id];sv();draw();return}
-if(!a)return;var l=find(t.getAttribute('data-i'));
+if(!a)return;if(a=='dbreset'){if(confirm('Repor todos os valores originais da tabela?')){S.dbe={};sv();dbr()}return}
+var l=find(t.getAttribute('data-i'));
 if(a=='del'&&l)S.lines=S.lines.filter(function(x){return x!==l});
 else if(a=='all'){S.lines.forEach(function(l){l.mine=true})}
 else if(a=='star'&&l){var d=dims(l);if(d.B&&d.A)S.defs[key(l)]=[d.B,d.A]}
@@ -108,6 +178,12 @@ function go(){S.planned=true;var rows=S.lines.filter(function(l){return l.mine})
 if(!rows.length){G('out').innerHTML='<div class="card w">Não há linhas escolhidas.</div>';return}
 var ls=mkLanes(bund(rows)),fl=ls.slice(),top=[],wn=[],sw=function(){return sum(fl,function(l){return l.w})};
 if(sw()>W-2){var hh=fl.map(function(l){return l.h}).sort(function(a,b){return a-b}),md=hh[Math.floor(hh.length/2)];fl.sort(function(a,b){return b.rk-a.rk||Math.abs(b.h-md)-Math.abs(a.h-md)||a.items.length-b.items.length||b.kg-a.kg});while(fl.length>1&&sw()>W-2)top.push(fl.shift())}
+function wd(a){return sum(a,function(l){return l.w})}
+var all=fl.concat(top),nl=all.length;
+if(top.length&&wd(top)>W&&nl<=16){var mxr=Math.max.apply(0,all.map(function(l){return l.rk})),bs=null,bc=1e9;
+for(var m=1;m<(1<<nl)-1;m++){var f2=[],t2=[];for(var i=0;i<nl;i++)((m>>i)&1?f2:t2).push(all[i]);if(wd(f2)>W||wd(t2)>W)continue;
+var hs2=f2.map(function(l){return l.h}),c=sum(t2,function(l){return mxr-l.rk})*1000+(W-wd(f2))*2+Math.max.apply(0,hs2)-Math.min.apply(0,hs2);if(c<bc){bc=c;bs=[f2,t2]}}
+if(bs){fl=bs[0];top=bs[1]}}
 function stat(l){l.len=sum(l.items,function(b){return b.L});l.w=Math.max.apply(0,l.items.map(function(b){return b.w}));l.h=Math.max.apply(0,l.items.map(function(b){return b.h}));l.kg=sum(l.items,function(b){return b.kg})}
 for(var mv=1;mv;){mv=0;fl.forEach(function(F){if(mv)return;top.forEach(function(Tl){if(mv)return;Tl.items.forEach(function(it,ci){if(mv)return;if(F.len+it.L<=LT&&it.w<=F.w+1&&Math.abs(F.h-it.h)<=6){Tl.items.splice(ci,1);F.items.push(it);stat(F);if(Tl.items.length)stat(Tl);else top.splice(top.indexOf(Tl),1);mv=1}})})})}
 var tw0=sw();if(tw0>W)wn.push('Não cabe na largura do camião.');
@@ -115,13 +191,13 @@ fl.sort(function(a,b){return a.h-b.h});var arr=[fl.shift()],wl=0,wr=0;fl.forEach
 arr=gapR(arr);var x=(W-tw0)/2,mg=x;arr.forEach(function(l){l.x=x;x+=l.w});
 var mxl=Math.max.apply(0,top.map(function(l){return l.len})),fu=top.filter(function(l){return l.len>=mxl-1}).sort(function(a,b){return b.kg-a.kg}),pa=top.filter(function(l){return l.len<mxl-1}).sort(function(a,b){return b.len-a.len||b.kg-a.kg}),tl=0,tr=0,fa=fu.length?[fu.shift()]:[];fu.forEach(function(l){if(tr<tl){fa.push(l);tr+=l.kg}else{fa.unshift(l);tl+=l.kg}});top=fa.concat(pa);top=gapR(top);
 var tw=sum(top,function(l){return l.w}),mid=arr[Math.floor((arr.length-1)/2)],st=Math.max(mg,Math.min(W-mg-tw,mid.x+mid.w/2-tw/2)),bat=0,sx=0,hs=[];
-if(top.length){bat=tw<=108?120:240;sx=Math.max(0,Math.min(W-bat,st+tw/2-bat/2));var t=st;top.forEach(function(l){l.x=t;t+=l.w});arr.forEach(function(l){if(l.x+l.w>sx&&l.x<sx+bat)hs.push(l.h)});if(tw>228)wn.push('Camada de cima muito larga.')}
+if(top.length){bat=tw<=108?120:240;sx=Math.max(0,Math.min(W-bat,st+tw/2-bat/2));var t=st;top.forEach(function(l){l.x=t;t+=l.w});arr.forEach(function(l){if(l.x+l.w>sx&&l.x<sx+bat)hs.push(l.h)});if(tw>W)wn.push('Camada de cima muito larga.')}
 O=[];function put(l,ly){var y=0;l.items.sort(function(a,b){return a.kg-b.kg});l.items.forEach(function(b){O.push({id:b.id,l:ly,rk:b.rk,loc:b.loc,x:l.x+(l.w-b.w)/2,y:y,w:b.w,h:b.h,L:b.L,t:b.t,kg:b.kg,c:b.c});y+=b.L});if(y>LT+.5)wn.push('Uma fila é maior que o camião.')}
 arr.forEach(function(l){put(l,0)});top.forEach(function(l){put(l,1)});
 O.sort(function(a,b){return a.rk-b.rk||a.l-b.l||a.x-b.x||a.y-b.y});O.forEach(function(b,i){b.n=i+1});
 var f=0,r=0,e=0,d=0;O.forEach(function(b){var q=Math.max(0,Math.min(b.y+b.L,LT/2)-b.y)/b.L;f+=b.kg*q;r+=b.kg*(1-q);var ql=Math.max(0,Math.min(b.x+b.w,W/2)-b.x)/b.w;e+=b.kg*ql;d+=b.kg*(1-ql)});
 var info='Total '+fmt(f+r)+' kg · frente '+fmt(f)+' · trás '+fmt(r)+' · esquerda '+fmt(e)+' · direita '+fmt(d)+' · '+O.length+' atados';
-if(top.length){var df=hs.length?Math.max.apply(0,hs)-Math.min.apply(0,hs):0;info+='<br>Barrotes de '+bat+' cm na faixa a tracejado. Chão nivelado só aí: diferença de '+df+' cm'+(df>4?' (grande, rever)':'')+'.'}
+if(top.length){var df=hs.length?Math.max.apply(0,hs)-Math.min.apply(0,hs):0;info+='<br>Barrotes de '+bat+' cm na faixa a tracejado. Chão nivelado só aí: diferença de '+df+' cm'+(df>6?' (grande, rever)':'')+'.'}
 window.PL={bat:bat,sx:sx};
 G('out').innerHTML=(wn.length?'<div class="card w">'+wn.join('<br>')+'</div>':'')+'<h2>4. Plano</h2><div class="card m">'+info+'</div><div class="card m">Tamanho do desenho <input type="range" id="zm" min="120" max="800" step="10" value="'+zv()+'" style="width:60%"></div><div class="lays"><div><h2>1.ª camada (chão)</h2><div id="s0" class="sv"></div></div>'+(top.length?'<div><h2>2.ª camada</h2><div id="s1" class="sv"></div></div>':'')+'</div>'+
 '<div class="card m">Toca num atado para o marcar como carregado. O número é a ordem de carga. Se mudares algo depois de marcar atados, o plano refaz-se e as posições podem mudar. Medidas estimadas pelo nº de peças quando não há configuração guardada.</div><h2>Atados</h2><div class="card tb"><table id="tb"></table></div>';
@@ -135,6 +211,6 @@ function draw(){G('s0').innerHTML=svg(0);if(G('s1'))G('s1').innerHTML=svg(1)}
 function zv(){return S.zoom||(innerWidth<700?Math.max(120,innerWidth-28):260)}
 document.addEventListener('input',function(e){if(e.target.id=='zm'){S.zoom=+e.target.value;document.documentElement.style.setProperty('--sw',S.zoom+'px');sv()}});
 document.documentElement.style.setProperty('--sw',zv()+'px');
-G('go').onclick=go;rl();
+G('go').onclick=go;rl();nav('menu');
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(function(){});
 </script></body></html>
