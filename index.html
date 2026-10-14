@@ -135,12 +135,19 @@ if(!l.comp||!l.pecas||!l.kg){G('er').textContent='Faltam comprimento, peças ou 
 G('er').textContent='';S.lines.push(l);['d','c','p','at','k'].forEach(function(i){G(i).value=''});rl()};
 function loadT(){return window.Tesseract?Promise.resolve():new Promise(function(ok,no){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';s.onload=ok;s.onerror=function(){no(new Error('Sem internet para carregar o leitor (só é preciso da primeira vez).'))};document.head.appendChild(s)})}
 function prep(f){return createImageBitmap(f).catch(function(){throw new Error('Não consegui abrir esta foto. Tira uma foto nova com o botão da câmara, ou escolhe-a em Ficheiros em vez de Fotos.')}).then(function(b){var k=Math.min(2,2400/Math.max(b.width,b.height)),c=document.createElement('canvas');c.width=Math.round(b.width*k);c.height=Math.round(b.height*k);var x=c.getContext('2d');x.filter='grayscale(1) contrast(1.5)';x.drawImage(b,0,0,c.width,c.height);return c})}
+function ocrFix(t){var m=t.match(/(RECT|QUAD|RED)\s*([\w&|]+?)\s*[xX×]\s*([\w&|]+?)(?:\s*[xX×]\s*([\w&|]+?))?(?=\s|$)/i);if(!m)return null;
+var dg=function(v){return (v||'').replace(/&/g,'6').replace(/[Il|]/g,'1').replace(/[oO]/g,'0').replace(/S/g,'5').replace(/B/g,'8').replace(/\D/g,'')},th=function(x){return x.length>=3?+x/100:x.length==2?+x/10:+x},tp=m[1].toUpperCase(),a=dg(m[2]),b=dg(m[3]),c=dg(m[4]);
+if(!a||!b)return null;
+if(tp=='RED'){var k=Object.keys(DB).filter(function(k){return k.indexOf('x')<0&&k.replace('.','')==a})[0];return k?{tipo:'RED',a:+k,b:+k,esp:th(b)}:null}
+if(tp=='QUAD')return{tipo:'QUAD',a:+a,b:+a,esp:th(b)};
+return c?{tipo:'RECT',a:Math.max(+a,+b),b:Math.min(+a,+b),esp:th(c)}:null}
 function ocrLines(t){var L=t.split('\n'),n=0,miss=[];
-for(var i=0;i<L.length;i++){var s=L[i];if(!/TUBO/i.test(s))continue;var tail=s.slice(s.search(/TUBO/i)),m=s.match(/(\d[\d.,]*)\s+TUBO/i),p=parse(tail),cm=tail.match(/\b(\d{1,2})[.,]000\b/);
-if(!p||!cm||!m){miss.push(tail);continue}
+for(var i=0;i<L.length;i++){var s=L[i];if(!/TUBO/i.test(s))continue;var tail=s.slice(s.search(/TUBO/i)),m=s.match(/(\d[\d.,]*)\s+TUBO/i),p=parse(tail)||ocrFix(tail),cm=tail.match(/\b(\d{1,2})[.,]?000\b/);
+var ds=p?p.tipo+' '+p.a+(p.tipo=='RECT'?' x '+p.b:'')+' x '+p.esp:'';
+if(!p||!cm){miss.push({raw:tail,desc:ds,comp:cm?+cm[1]:0});continue}
 var rest=tail.slice(tail.indexOf(cm[0])+cm[0].length).match(/\d[\d.,]*/g)||[],pz=parseInt((rest[0]||'').replace(/[.,]/g,'')),kg=parseInt((rest[1]||'').replace(/[.,]/g,'')),loc='';
 for(var j=i;j<Math.min(L.length,i+3);j++){var q=L[j].match(/LOCALIZ\S*[^A-Za-z0-9]*([A-Za-z0-9]{4,7})/i);if(q){loc=q[1].toUpperCase().replace(/O/g,'0').replace(/I/g,'1');break}}
-if(!pz||!kg){miss.push(tail);continue}
+if(!m||!pz||!kg||pz>9999||kg<100){miss.push({raw:tail,desc:ds,comp:+cm[1]});continue}
 S.lines.push(Object.assign(p,{id:S.nid++,comp:+cm[1],pecas:pz,atados:nm(m[1].replace(/\./g,''))||1,kg:kg,loc:loc,mine:false,B:0,A:0,rot:false}));n++}
 rl();return{n:n,miss:miss}}
 function kgm(tp,a,b,e){return(tp=='RED'?Math.PI*e*(a-e):2*e*(a+b-2*e))*0.00785}
@@ -159,7 +166,8 @@ try{G('st').textContent='A preparar o leitor...';await loadT();var c=await prep(
 var w=await Tesseract.createWorker('por',1,{logger:function(m){if(m.status)G('st').textContent=m.status+(m.progress?' '+Math.round(m.progress*100)+'%':'')}});
 await w.setParameters({tessedit_pageseg_mode:'6'});var r=await w.recognize(c);await w.terminate();
 G('raw').textContent=r.data.text;G('rawd').style.display='block';var o=ocrLines(r.data.text);
-G('st').textContent=(o.n?('Li '+o.n+' linhas. Marca as que são tuas e confere os números.'):'Não consegui ler linhas.')+(o.miss.length?' Não consegui ler '+o.miss.length+' linha(s): "'+o.miss.join('" | "')+'". Está preenchida a primeira em "Ou escreve uma linha"; vê também o texto lido.':'');if(o.miss.length)G('d').value=o.miss[0]}
+G('st').textContent=(o.n?('Li '+o.n+' linhas. Marca as que são tuas e confere os números.'):'Não consegui ler linhas completas.')+(o.miss.length?' '+o.miss.length+' linha(s) com números ilegíveis: "'+o.miss.map(function(x){return x.raw}).join('" | "')+'". Preenchi em "Ou escreve uma linha" o que consegui (tubo e comprimento): completa as peças, os atados e o peso a olhar para a foto.':'');
+if(o.miss.length){var q=o.miss[0];G('d').value=q.desc||q.raw;if(q.comp)G('c').value=q.comp}}
 catch(e){G('st').textContent='Erro: '+(e.message||e)}};
 G('clr').onclick=function(){if(confirm('Apagar as linhas e o plano deste mapa? (as configurações guardadas ficam)')){S.lines=[];S.order=[];S.done={};S.planned=false;rl();G('out').innerHTML='';G('pv').style.display='none';G('rawd').style.display='none';G('st').textContent=''}};
 function rl(){syncOrder();var h='<h2>2. Linhas</h2><div class="card"><div class="m">Marca as linhas que são tuas (as que têm T2, 130, G ou C escrito à mão).</div><button data-a="all">Marcar todas</button>';
