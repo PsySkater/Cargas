@@ -45,7 +45,7 @@ text{fill:var(--fg);font-size:6.3px;pointer-events:none;text-anchor:middle}
 <button id="go" class="p">Gerar plano</button><button id="clr">Limpar mapa</button>
 <div id="out"></div></div>
 <script>
-var S={lines:[],order:[],defs:{},done:{},nid:1,planned:false,useOrd:true,zoom:0,dbe:{}},O=[],LT=1360,W=244;
+var S={lines:[],order:[],defs:{},done:{},nid:1,planned:false,useOrd:true,zoom:0,dbe:{}},O=[],LT=1360,W=245;
 try{S=Object.assign(S,JSON.parse(localStorage.getItem('carga1')||'{}'))}catch(e){}
 function sv(){try{localStorage.setItem('carga1',JSON.stringify(S))}catch(e){}}
 var G=function(i){return document.getElementById(i)},nm=function(x){return parseFloat(String(x).replace(',','.'))||0};
@@ -189,7 +189,7 @@ function sum(a,f){return a.reduce(function(s,l){return s+f(l)},0)}
 function go(){S.planned=true;var rows=S.lines.filter(function(l){return l.mine});
 if(!rows.length){G('out').innerHTML='<div class="card w">Não há linhas escolhidas.</div>';return}
 var ls=mkLanes(bund(rows)),fl=ls.slice(),top=[],wn=[],sw=function(){return sum(fl,function(l){return l.w})};
-if(sw()>W-2){var hh=fl.map(function(l){return l.h}).sort(function(a,b){return a-b}),md=hh[Math.floor(hh.length/2)];fl.sort(function(a,b){return b.rk-a.rk||Math.abs(b.h-md)-Math.abs(a.h-md)||a.items.length-b.items.length||b.kg-a.kg});while(fl.length>1&&sw()>W-2)top.push(fl.shift())}
+if(sw()>W){var hh=fl.map(function(l){return l.h}).sort(function(a,b){return a-b}),md=hh[Math.floor(hh.length/2)];fl.sort(function(a,b){return b.rk-a.rk||Math.abs(b.h-md)-Math.abs(a.h-md)||a.items.length-b.items.length||b.kg-a.kg});while(fl.length>1&&sw()>W)top.push(fl.shift())}
 function wd(a){return sum(a,function(l){return l.w})}
 var all=fl.concat(top),nl=all.length;
 if(top.length&&wd(top)>W&&nl<=16){var mxr=Math.max.apply(0,all.map(function(l){return l.rk})),bs=null,bc=1e9;
@@ -198,28 +198,38 @@ var hs2=f2.map(function(l){return l.h}),c=sum(t2,function(l){return mxr-l.rk})*1
 if(bs){fl=bs[0];top=bs[1]}}
 function stat(l){l.len=sum(l.items,function(b){return b.L});l.w=Math.max.apply(0,l.items.map(function(b){return b.w}));l.h=Math.max.apply(0,l.items.map(function(b){return b.h}));l.kg=sum(l.items,function(b){return b.kg})}
 for(var mv=1;mv;){mv=0;fl.forEach(function(F){if(mv)return;top.forEach(function(Tl){if(mv)return;Tl.items.forEach(function(it,ci){if(mv)return;if(F.len+it.L<=LT&&it.w<=F.w+1&&Math.abs(F.h-it.h)<=6){Tl.items.splice(ci,1);F.items.push(it);stat(F);if(Tl.items.length)stat(Tl);else top.splice(top.indexOf(Tl),1);mv=1}})})})}
+var AL=fl.concat(top);
+function frac(){var M=Math.max.apply(0,AL.map(function(l){return l.len}))/2,f=0,r=0;AL.forEach(function(l){var y=0;l.items.slice().sort(function(a,b){return a.kg-b.kg}).forEach(function(b){var q=Math.max(0,Math.min(y+b.L,M)-y)/b.L;f+=b.kg*q;r+=b.kg*(1-q);y+=b.L})});return r/(f+r)}
+function fo(){var r=frac();return r<.5?(.5-r)*3:Math.abs(r-.52)}
+for(var it=0;it<60;it++){var cur=fo(),bd=0,bp=null;if(cur<.001)break;
+AL.forEach(function(A,ia){A.items.forEach(function(a,i){AL.forEach(function(B,ib){if(ib<=ia)return;B.items.forEach(function(b,j){if(a.L!=b.L||a.w!=b.w||Math.abs(a.h-b.h)>6||a.kg==b.kg)return;A.items[i]=b;B.items[j]=a;var d=cur-fo();A.items[i]=a;B.items[j]=b;if(d>bd+1e-6){bd=d;bp=[ia,i,ib,j]}})})})});
+if(!bp||bd<.001)break;var A1=AL[bp[0]],B1=AL[bp[2]],t1=A1.items[bp[1]];A1.items[bp[1]]=B1.items[bp[3]];B1.items[bp[3]]=t1;stat(A1);stat(B1)}
+var tops=[];top.slice().sort(function(a,b){return a.rk-b.rk||b.len-a.len||b.kg-a.kg}).forEach(function(l){var d=null;tops.forEach(function(L){if(!d&&wd(L)+l.w<=W)d=L});if(!d){d=[];tops.push(d)}d.push(l)});
 var tw0=sw();if(tw0>W)wn.push('Não cabe na largura do camião.');
 fl.sort(function(a,b){return a.h-b.h});var arr=[fl.shift()],wl=0,wr=0;fl.forEach(function(l){if(wr<wl){arr.push(l);wr+=l.kg}else{arr.unshift(l);wl+=l.kg}});
 arr=gapR(arr);var x=(W-tw0)/2,mg=x;arr.forEach(function(l){l.x=x;x+=l.w});
-var mxl=Math.max.apply(0,top.map(function(l){return l.len})),fu=top.filter(function(l){return l.len>=mxl-1}).sort(function(a,b){return b.kg-a.kg}),pa=top.filter(function(l){return l.len<mxl-1}).sort(function(a,b){return b.len-a.len||b.kg-a.kg}),tl=0,tr=0,fa=fu.length?[fu.shift()]:[];fu.forEach(function(l){if(tr<tl){fa.push(l);tr+=l.kg}else{fa.unshift(l);tl+=l.kg}});top=fa.concat(pa);top=gapR(top);
-var tw=sum(top,function(l){return l.w}),mid=arr[Math.floor((arr.length-1)/2)],st=Math.max(mg,Math.min(W-mg-tw,mid.x+mid.w/2-tw/2)),bat=0,sx=0,hs=[];
-if(top.length){bat=tw<=108?120:240;sx=Math.max(0,Math.min(W-bat,st+tw/2-bat/2));var t=st;top.forEach(function(l){l.x=t;t+=l.w});arr.forEach(function(l){if(l.x+l.w>sx&&l.x<sx+bat)hs.push(l.h)});if(tw>W)wn.push('Camada de cima muito larga.')}
+var mid=arr[Math.floor((arr.length-1)/2)],bat=0,sx=0,hs=[],strips=[];
+tops.forEach(function(tp,ti){var mxl=Math.max.apply(0,tp.map(function(l){return l.len})),fu=tp.filter(function(l){return l.len>=mxl-1}).sort(function(a,b){return b.kg-a.kg}),pa=tp.filter(function(l){return l.len<mxl-1}).sort(function(a,b){return b.len-a.len||b.kg-a.kg}),tl=0,tr=0,fa=fu.length?[fu.shift()]:[];fu.forEach(function(l){if(tr<tl){fa.push(l);tr+=l.kg}else{fa.unshift(l);tl+=l.kg}});
+var ord=gapR(fa.concat(pa)),tw=wd(ord),st=Math.max(mg,Math.min(W-mg-tw,mid.x+mid.w/2-tw/2)),bt=tw<=108?120:240,sxx=Math.max(0,Math.min(W-bt,st+tw/2-bt/2)),t=st;
+ord.forEach(function(l){l.x=t;t+=l.w});tops[ti]=ord;strips.push({l:ti,sx:sxx,bat:bt});
+if(ti==0){bat=bt;sx=sxx;arr.forEach(function(l){if(l.x+l.w>sxx&&l.x<sxx+bt)hs.push(l.h)})}
+if(tw>W)wn.push('A camada '+(ti+2)+' é mais larga que o camião.')});
 O=[];function put(l,ly){var y=0;l.items.sort(function(a,b){return a.kg-b.kg});l.items.forEach(function(b){O.push({id:b.id,l:ly,rk:b.rk,loc:b.loc,x:l.x+(l.w-b.w)/2,y:y,w:b.w,h:b.h,L:b.L,t:b.t,kg:b.kg,c:b.c});y+=b.L});if(y>LT+.5)wn.push('Uma fila é maior que o camião.')}
-arr.forEach(function(l){put(l,0)});top.forEach(function(l){put(l,1)});
+arr.forEach(function(l){put(l,0)});tops.forEach(function(tp,ti){tp.forEach(function(l){put(l,ti+1)})});
 O.sort(function(a,b){return a.rk-b.rk||a.l-b.l||a.x-b.x||a.y-b.y});O.forEach(function(b,i){b.n=i+1});
-var f=0,r=0,e=0,d=0;O.forEach(function(b){var q=Math.max(0,Math.min(b.y+b.L,LT/2)-b.y)/b.L;f+=b.kg*q;r+=b.kg*(1-q);var ql=Math.max(0,Math.min(b.x+b.w,W/2)-b.x)/b.w;e+=b.kg*ql;d+=b.kg*(1-ql)});
+var M=Math.max.apply(0,O.map(function(b){return b.y+b.L}))/2,f=0,r=0,e=0,d=0;O.forEach(function(b){var q=Math.max(0,Math.min(b.y+b.L,M)-b.y)/b.L;f+=b.kg*q;r+=b.kg*(1-q);var ql=Math.max(0,Math.min(b.x+b.w,W/2)-b.x)/b.w;e+=b.kg*ql;d+=b.kg*(1-ql)});
 var info='Total '+fmt(f+r)+' kg · frente '+fmt(f)+' · trás '+fmt(r)+' · esquerda '+fmt(e)+' · direita '+fmt(d)+' · '+O.length+' atados';
-if(top.length){var df=hs.length?Math.max.apply(0,hs)-Math.min.apply(0,hs):0;info+='<br>Barrotes de '+bat+' cm na faixa a tracejado. Chão nivelado só aí: diferença de '+df+' cm'+(df>6?' (grande, rever)':'')+'.'}
-window.PL={bat:bat,sx:sx};
-G('out').innerHTML=(wn.length?'<div class="card w">'+wn.join('<br>')+'</div>':'')+'<h2>4. Plano</h2><div class="card m">'+info+'</div><div class="card m">Tamanho do desenho <input type="range" id="zm" min="120" max="800" step="10" value="'+zv()+'" style="width:60%"></div><div class="lays"><div><h2>1.ª camada (chão)</h2><div id="s0" class="sv"></div></div>'+(top.length?'<div><h2>2.ª camada</h2><div id="s1" class="sv"></div></div>':'')+'</div>'+
+if(tops.length){var df=hs.length?Math.max.apply(0,hs)-Math.min.apply(0,hs):0;info+='<br>Barrotes de '+bat+' cm na faixa a tracejado. Chão nivelado só aí: diferença de '+df+' cm'+(df>6?' (grande, rever)':'')+'.'}
+window.PL={bat:bat,sx:sx,n:tops.length+1,strips:strips};
+G('out').innerHTML=(wn.length?'<div class="card w">'+wn.join('<br>')+'</div>':'')+'<h2>4. Plano</h2><div class="card m">'+info+'</div><div class="card m">Tamanho do desenho <input type="range" id="zm" min="120" max="800" step="10" value="'+zv()+'" style="width:60%"></div><div class="lays">'+[0].concat(tops.map(function(_,i){return i+1})).map(function(i){return '<div><h2>'+(i+1)+'.ª camada'+(i?'':' (chão)')+'</h2><div id="s'+i+'" class="sv"></div></div>'}).join('')+'</div>'+
 '<div class="card m">Toca num atado para o marcar como carregado. O número é a ordem de carga. Se mudares algo depois de marcar atados, o plano refaz-se e as posições podem mudar. Medidas estimadas pelo nº de peças quando não há configuração guardada.</div><h2>Atados</h2><div class="card tb"><table id="tb"></table></div>';
 var h='<tr><th>#</th><th>Local</th><th>Tubo</th><th>L×A×C cm</th><th>kg</th></tr>';O.forEach(function(b){h+='<tr><td>'+b.n+'</td><td>'+(b.loc||'-')+'</td><td>'+b.t+'</td><td>'+b.w+'×'+b.h+'×'+b.L+'</td><td>'+fmt(b.kg)+'</td></tr>'});G('tb').innerHTML=h;sv();draw()}
 function svg(l){var P=window.PL,s='<svg viewBox="0 -24 '+W+' '+(LT+48)+'"><rect x="0" y="0" width="'+W+'" height="'+LT+'" fill="none" stroke="currentColor" stroke-width="1"/><text x="'+W/2+'" y="-8" style="font-size:9px">▲ FRENTE (cabine)</text><text x="'+W/2+'" y="'+(LT+16)+'" style="font-size:9px">TRASEIRA ▼</text>';
-O.forEach(function(b){if(l==1&&b.l==0)s+='<rect x="'+b.x+'" y="'+b.y+'" width="'+b.w+'" height="'+b.L+'" fill="none" stroke="var(--mut)" stroke-dasharray="3 3" stroke-width=".4"/>'});
+O.forEach(function(b){if(l>0&&b.l==l-1)s+='<rect x="'+b.x+'" y="'+b.y+'" width="'+b.w+'" height="'+b.L+'" fill="none" stroke="var(--mut)" stroke-dasharray="3 3" stroke-width=".4"/>'});
 O.forEach(function(b){if(b.l!=l)return;var cx=b.x+b.w/2,cy=b.y+b.L/2,d=S.done[b.id];s+='<rect class="bd'+(d?' done':'')+'" data-id="'+b.id+'" x="'+b.x+'" y="'+b.y+'" width="'+b.w+'" height="'+b.L+'" fill="var(--b'+b.c+')"/><text x="'+cx+'" y="'+(cy-12)+'" style="font-size:12px;font-weight:700">'+(d?'✓':b.n)+'</text><text x="'+cx+'" y="'+(cy+2)+'">'+b.t+'</text><text x="'+cx+'" y="'+(cy+10)+'">'+fmt(b.kg)+' kg</text><text x="'+cx+'" y="'+(cy+18)+'">'+b.w+'×'+b.h+' cm</text><text x="'+cx+'" y="'+(cy+26)+'">'+(b.loc||'')+'</text>'});
-if(P.bat&&l==0)s+='<rect x="'+P.sx+'" y="0" width="'+P.bat+'" height="'+LT+'" fill="none" stroke="var(--ok)" stroke-width="1" stroke-dasharray="5 4" style="pointer-events:none"/>';
+P.strips.forEach(function(q){if(q.l==l)s+='<rect x="'+q.sx+'" y="0" width="'+q.bat+'" height="'+LT+'" fill="none" stroke="var(--ok)" stroke-width="1" stroke-dasharray="5 4" style="pointer-events:none"/>'});
 return s+'</svg>'}
-function draw(){G('s0').innerHTML=svg(0);if(G('s1'))G('s1').innerHTML=svg(1)}
+function draw(){for(var i=0;i<window.PL.n;i++)G('s'+i).innerHTML=svg(i)}
 function zv(){return S.zoom||(innerWidth<700?Math.max(120,innerWidth-28):260)}
 document.addEventListener('input',function(e){if(e.target.id=='q')qs(e.target.value);if(e.target.id=='zm'){S.zoom=+e.target.value;document.documentElement.style.setProperty('--sw',S.zoom+'px');sv()}});
 document.documentElement.style.setProperty('--sw',zv()+'px');
