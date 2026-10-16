@@ -22,6 +22,7 @@ svg{width:100%;height:auto;display:block;background:var(--card);border:1px solid
 .bd{stroke:var(--fg);stroke-width:.5;cursor:pointer}.done{opacity:.4}
 text{fill:var(--fg);font-size:6.3px;pointer-events:none;text-anchor:middle}
 .sv{width:var(--sw,100%);max-width:100%}.lays{display:flex;flex-wrap:wrap;gap:0 16px;align-items:flex-start}.big{display:block;width:100%;padding:16px;font-size:17px;margin:8px 0}.btn{display:inline-block;background:var(--card);color:var(--fg);border:1px solid var(--bd);border-radius:8px;padding:7px 11px;margin:3px 3px 3px 0;font-size:15px}.tb{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px}td,th{padding:5px 6px;border-bottom:1px solid var(--bd);text-align:left;white-space:nowrap}
+.cv{position:absolute;left:0;right:0;background:rgba(0,0,0,.5);pointer-events:none}
 </style></head><body>
 <h1>Carga</h1>
 <div id="menu"><div class="card"><button class="p big" data-nav="map">Ler mapa e calcular a carga</button><button class="big" data-nav="db">Base de dados dos atados</button></div></div>
@@ -32,7 +33,8 @@ text{fill:var(--fg);font-size:6.3px;pointer-events:none;text-anchor:middle}
 <input type="file" id="f" accept="image/*"><br><label class="btn">📷 Tirar foto<input type="file" id="fc" accept="image/*" capture="environment" style="display:none"></label><button id="ocr" class="p">Ler mapa</button>
 <div id="st" class="m"></div>
 <details id="rawd" style="display:none"><summary class="m">Texto lido (ajuda a corrigir)</summary><pre id="raw" class="m" style="white-space:pre-wrap"></pre></details>
-<img id="pv" alt="" style="display:none;width:100%;border-radius:8px;margin-top:8px"></div>
+<details id="crd" style="display:none"><summary class="m">Recortar a tabela (opcional)</summary><div class="m">Tapa o cabeçalho e as notas do rodapé para o leitor ler só a tabela.</div><label style="display:block">Início <input type="range" id="cr1" min="0" max="90" value="0" style="width:70%"></label><label style="display:block">Fim <input type="range" id="cr2" min="10" max="100" value="100" style="width:70%"></label></details>
+<div id="pvw" style="display:none;position:relative;margin-top:8px"><img id="pv" alt="" style="width:100%;border-radius:8px;display:block"><div id="cv1" class="cv" style="top:0;height:0"></div><div id="cv2" class="cv" style="bottom:0;height:0"></div></div></div>
 <div class="card"><b>Procurar na base de dados</b><br><input id="q" style="width:100%;box-sizing:border-box" placeholder="ex.: 100x100, 120x60, Ø88,9"><div id="qr"></div></div>
 <div class="card"><b>Ou escreve uma linha</b>
 <label style="display:block">Descrição<br><input id="d" placeholder="ex. TUBO QUAD 60,0 x 4,00 S355J2H"></label>
@@ -46,15 +48,53 @@ text{fill:var(--fg);font-size:6.3px;pointer-events:none;text-anchor:middle}
 <button id="go" class="p">Gerar plano</button><button id="clr">Limpar mapa</button>
 <div id="out"></div></div>
 <script>
-var S={lines:[],order:[],defs:{},done:{},nid:1,planned:false,useOrd:true,zoom:0,dbe:{}},O=[],LT=1360,W=245;
+var S={lines:[],order:[],defs:{},done:{},nid:1,planned:false,useOrd:true,zoom:0,dbe:{},known:[]},O=[],LT=1360,W=245;
 try{S=Object.assign(S,JSON.parse(localStorage.getItem('carga1')||'{}'))}catch(e){}
 function sv(){try{localStorage.setItem('carga1',JSON.stringify(S))}catch(e){}}
 var G=function(i){return document.getElementById(i)},nm=function(x){return parseFloat(String(x).replace(',','.'))||0};
+var OWN=['T2','130 6 m','130 12 m','Galvanização','Calha'],CR={a:0,b:100},PH='';
+var KNOWN=(function(){var a=['F0200','F02A00','F1100'],i;for(i=1;i<=10;i++)a.push('F01B'+(i<10?'0':'')+i);for(i=1;i<=7;i++){a.push('F01C0'+i);a.push('F01D0'+i)}return a})();
+var GEN=/^(F0[3-69][0-9A-Z]{2,3}|[0-9]E[0-9]{2})$/;
+function wh(l){l=(l||'').toUpperCase();if(!l)return '';
+if(/^F01B(0[1-9]|10)$/.test(l))return 'T2';
+if(/^F01C0[1-7]$/.test(l))return '130 6 m';
+if(/^F01D0[1-7]$/.test(l))return '130 12 m';
+if(/^F02(00|A00)$/.test(l))return 'Galvanização';
+if(l=='F1100')return 'Calha';
+if(/^F0[3-69][0-9A-Z]{2,3}$/.test(l))return 'Fábrica de cima';
+if(/^[0-9]E[0-9]{2}$/.test(l))return 'Fábrica nova';
+return l}
+function isLoc(t){return KNOWN.indexOf(t)>=0||S.known.indexOf(t)>=0||GEN.test(t)}
+var CONF={'O':'0','0':'O','I':'1','1':'I','L':'1','|':'1','B':'8','8':'B','S':'5','5':'S','Z':'2','2':'Z','G':'6','6':'G'};
+function scst(a,b){return a==b?0:(CONF[a]==b||CONF[b]==a)?.3:1}
+function ld(a,b){var d=[],i,j;for(i=0;i<=a.length;i++)d[i]=[i];for(j=1;j<=b.length;j++)d[0][j]=j;for(i=1;i<=a.length;i++)for(j=1;j<=b.length;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+scst(a[i-1],b[j-1]));return d[a.length][b.length]}
+function locFix(t){t=(t||'').toUpperCase().replace(/[^A-Z0-9|]/g,'');if(!t)return '';var all=KNOWN.concat(S.known||[]);if(all.indexOf(t)>=0)return t;
+var g=t.replace(/O/g,'0').replace(/[I|L]/g,'1');if(GEN.test(g))return g;
+var best=null,bd=9,tie=false;all.forEach(function(k){var d=ld(t,k);if(d<bd-1e-9){bd=d;best=k;tie=false}else if(Math.abs(d-bd)<1e-9)tie=true});
+if(best&&bd<=1.3&&!tie)return best;return t}
+function extractLocs(s){s=s.toUpperCase();var k=s.search(/LOC/);if(k>=0){s=s.slice(k);var r=s.replace(/^LOC\S*?(?:ÕES|OES|0ES|ÔES|ES)(?=[A-Z0-9:;.\s|]|$)/,'');if(r==s)r=s.replace(/^LOCALIZ[^\s:]*/,'');s=r}
+var o=[];s.split(/[\s,;:\/]+/).forEach(function(t){t=t.replace(/[^A-Z0-9|]/g,'');if(!t)return;var ps=(t.length==10||t.length==12)?[t.slice(0,t.length/2),t.slice(t.length/2)]:[t];ps.forEach(function(q){if(q.length<4||q.length>7)return;var f=locFix(q);if((isLoc(f)||(/^[F0-9][A-Z0-9]{4,5}$/.test(f)&&/\d/.test(f)))&&o.indexOf(f)<0)o.push(f)})});return o.slice(0,3)}
+function nf(x){return parseFloat(String(x).replace(/\s+/g,'').replace(/\.(?=\d{3}(\D|$))/g,'').replace(',','.'))||0}
+function iv(x){return parseInt(String(x).replace(/[.,\s]/g,''))}
+function numsOf(s){return s.match(/\d[\d.,]*/g)||[]}
+function redNoX(s){var m=/RED\D*?(\d[\d.]*\d)/.exec(s);if(!m)return null;var tk=m[1],ds=Object.keys(DB).filter(function(k){return k.indexOf('x')<0}).sort(function(a,b){return b.length-a.length});
+for(var i=0;i<ds.length;i++){var k=ds[i];if(tk.indexOf(k)==0&&tk.length>k.length){var rs=tk.slice(k.length).replace(/^\./,'');if(/^\d+(\.\d+)?$/.test(rs)&&+rs>0&&+rs<=12)return{tipo:'RED',a:+k,b:+k,esp:+rs}}}return null}
+function chkOf(l){var c=[],m=l.mt||0;if(m&&Math.abs(l.pecas*l.comp-m)>1)c.push('metros lidos '+fmt(m)+' ≠ peças × comprimento '+fmt(l.pecas*l.comp));
+var f=kgm(l.tipo,l.a,l.b,l.esp)*l.pecas*l.comp;if(f>0&&!l.est&&Math.abs(l.kg-f)/f>.06)c.push('peso '+fmt(l.kg)+' kg longe do teórico ~'+fmt(f));return c}
+function spFix(l){var T=nb(l),n=l.locs.length;if(!l.sp||l.sp.length!=n)l.sp=l.locs.map(function(_,j){return j?0:T});var r=0;for(var j=1;j<n;j++){l.sp[j]=Math.max(0,Math.min(T-r,Math.round(l.sp[j]||0)));r+=l.sp[j]}l.sp[0]=T-r}
+function expand(rows){var o=[];rows.forEach(function(l){if(l.both&&l.locs){spFix(l);var T=nb(l);l.locs.forEach(function(x,j){var n=l.sp[j];if(!n)return;var f=n/T;o.push(Object.assign({},l,{loc:x,pid:l.id,id:l.id+(j+1)/10,pecas:l.pecas*f,atados:n==T?l.atados:n,kg:l.kg*f,both:false}))})}else o.push(l)});return o}
+function locUI(l){var i=l.id,h='<div class="lc">';
+if(l.locs){h+='Local certo (a riscada é a errada): '+l.locs.map(function(x){return '<button data-a="loc" data-i="'+i+'" data-v="'+x+'"'+(!l.both&&x==l.loc?' class="sel"':'')+'>'+x+'</button>'}).join('')+'<button data-a="loc" data-i="'+i+'" data-v="*"'+(l.both?' class="sel"':'')+'>As duas</button>';
+if(l.both){spFix(l);var T=nb(l);h+='<div class="m">Atados por local (total '+T+'):</div>';l.locs.forEach(function(x,j){h+='<label>'+x+(wh(x)!=x?' ('+wh(x)+')':'')+' '+(j?'<input type="number" min="0" max="'+T+'" data-a="sp" data-i="'+i+'" data-j="'+j+'" value="'+l.sp[j]+'">':'<b>'+l.sp[0]+'</b>')+'</label>'});
+if(l.sp.slice(1).every(function(n){return !n}))h+='<div class="w">Indica quantos atados vão para o 2.º local (o resto fica no 1.º).</div>'}}
+if(!l.both)h+=' <label>Local <input data-a="locin" data-i="'+i+'" value="'+(l.loc||'')+'" style="width:78px"></label>'+(wh(l.loc)&&wh(l.loc)!=l.loc?'<span class="m"> '+wh(l.loc)+'</span>':'')+((l.locBad||!l.loc)?'<span class="w"> ⚠ local '+(l.loc?'não reconhecido':'em falta')+': escreve-o</span>':'');
+return h+'</div>'}
+function chkUI(l){var c=l.chk||[];return c.length?'<div class="w">⚠ '+c.join(' · ')+'. Confere com a foto.</div>':''}
 function fmt(k){return Math.round(k).toLocaleString('pt-PT')}
-function parse(d){var s=d.toUpperCase().replace(/,/g,'.'),m;
+function parse(d){var s=d.toUpperCase().replace(/,/g,'.').replace(/(\d)\s*X\s*X\s*(?=[\d.])/g,'$1X'),m;
 if(/RED/.test(s)&&(m=s.match(/RED\D*?([\d.]+)\s*X\s*([\d.]+)/)))return{tipo:'RED',a:+m[1],b:+m[1],esp:+m[2]};
 if(/RECT/.test(s)&&(m=s.match(/RECT\D*?([\d.]+)\s*X\s*([\d.]+)\s*X\s*([\d.]+)/)))return{tipo:'RECT',a:Math.max(+m[1],+m[2]),b:Math.min(+m[1],+m[2]),esp:+m[3]};
-if(/QUAD/.test(s)&&(m=s.match(/QUAD\D*?([\d.]+)\s*X\s*([\d.]+)/)))return{tipo:'QUAD',a:+m[1],b:+m[1],esp:+m[2]};return null}
+if(/QUAD/.test(s)&&(m=s.match(/QUAD\D*?([\d.]+)\s*X\s*([\d.]+)/)))return{tipo:'QUAD',a:+m[1],b:+m[1],esp:+m[2]};return redNoX(s)}
 function lab(l){return l.tipo+' '+l.a+'×'+(l.tipo=='RECT'?l.b+'×':'')+l.esp}
 function key(l){return l.tipo+l.a+'x'+l.b+'x'+l.esp+'/'+l.comp}
 function nb(l){return Math.max(1,Math.ceil(l.atados-1e-6))}
@@ -129,28 +169,49 @@ if(best){N=best[0];W=best[1];rows=2*(W-N)+1}else{W=c?Math.max(c[0],c[1]):Math.ma
 return[Math.round(W*a*10)/10,Math.round(((rows-1)*.866+1)*a*10)/10,N,W]}
 var LF=null;
 function find(i){return S.lines.filter(function(l){return l.id==i})[0]}
-function syncOrder(){var u=[];S.lines.forEach(function(l){if(l.mine&&u.indexOf(l.loc)<0)u.push(l.loc)});S.order=S.order.filter(function(x){return u.indexOf(x)>=0});u.forEach(function(x){if(S.order.indexOf(x)<0)S.order.push(x)})}
+function syncOrder(){var u=[];expand(S.lines.filter(function(l){return l.mine})).forEach(function(l){var g=wh(l.loc);if(u.indexOf(g)<0)u.push(g)});S.order=S.order.filter(function(x){return u.indexOf(x)>=0});u.forEach(function(x){if(S.order.indexOf(x)<0)S.order.push(x)})}
 G('add').onclick=function(){var p=parse(G('d').value);if(!p){G('er').textContent='Não percebi a descrição. Ex.: TUBO QUAD 60,0 x 4,00 | TUBO RECT 120x60x8 | TUBO RED 114,3x3';return}
 var l=Object.assign(p,{id:S.nid++,comp:nm(G('c').value),pecas:nm(G('p').value),atados:nm(G('at').value)||1,kg:nm(G('k').value),loc:G('lo').value.trim().toUpperCase(),mine:true,B:0,A:0,rot:false});
 if(!l.comp||!l.pecas||!l.kg){G('er').textContent='Faltam comprimento, peças ou peso.';return}
 G('er').textContent='';S.lines.push(l);['d','c','p','at','k'].forEach(function(i){G(i).value=''});rl()};
 function loadT(){return window.Tesseract?Promise.resolve():new Promise(function(ok,no){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';s.onload=ok;s.onerror=function(){no(new Error('Sem internet para carregar o leitor (só é preciso da primeira vez).'))};document.head.appendChild(s)})}
-function prep(f){return createImageBitmap(f).catch(function(){throw new Error('Não consegui abrir esta foto. Tira uma foto nova com o botão da câmara, ou escolhe-a em Ficheiros em vez de Fotos.')}).then(function(b){var k=Math.min(2,2400/Math.max(b.width,b.height)),c=document.createElement('canvas');c.width=Math.round(b.width*k);c.height=Math.round(b.height*k);var x=c.getContext('2d');x.filter='grayscale(1) contrast(1.5)';x.drawImage(b,0,0,c.width,c.height);return c})}
-function ocrFix(t){var m=t.match(/(RECT|QUAD|RED)\s*([\w&|]+?)\s*[xX×]\s*([\w&|]+?)(?:\s*[xX×]\s*([\w&|]+?))?(?=\s|$)/i);if(!m)return null;
+function bmp(f){return createImageBitmap(f).catch(function(){throw new Error('Não consegui abrir esta foto. Tira uma foto nova com o botão da câmara, ou escolhe-a em Ficheiros em vez de Fotos.')})}
+function scaled(b,px){var k=Math.min(2,px/Math.max(b.width,b.height)),sy=b.height*CR.a/100,sh=b.height*(CR.b-CR.a)/100,c=document.createElement('canvas');c.width=Math.round(b.width*k);c.height=Math.max(1,Math.round(sh*k));var x=c.getContext('2d');x.filter='grayscale(1) contrast(1.5)';x.drawImage(b,0,sy,b.width,sh,0,0,c.width,c.height);return c}
+function ocrFix(t){var m=t.match(/(RECT|QUAD|RED)\s*([\w&|]+?)\s*[xX×]{1,2}\s*([\w&|]+?)(?:\s*[xX×]{1,2}\s*([\w&|]+?))?(?=\s|$)/i);if(!m)return null;
 var dg=function(v){return (v||'').replace(/&/g,'6').replace(/[Il|]/g,'1').replace(/[oO]/g,'0').replace(/S/g,'5').replace(/B/g,'8').replace(/\D/g,'')},th=function(x){return x.length>=3?+x/100:x.length==2?+x/10:+x},tp=m[1].toUpperCase(),a=dg(m[2]),b=dg(m[3]),c=dg(m[4]);
 if(!a||!b)return null;
 if(tp=='RED'){var k=Object.keys(DB).filter(function(k){return k.indexOf('x')<0&&k.replace('.','')==a})[0];return k?{tipo:'RED',a:+k,b:+k,esp:th(b)}:null}
 if(tp=='QUAD')return{tipo:'QUAD',a:+a,b:+a,esp:th(b)};
 return c?{tipo:'RECT',a:Math.max(+a,+b),b:Math.min(+a,+b),esp:th(c)}:null}
-function ocrLines(t){var L=t.split('\n'),n=0,miss=[];
-for(var i=0;i<L.length;i++){var s=L[i];if(!/TUBO/i.test(s))continue;var tail=s.slice(s.search(/TUBO/i)),m=s.match(/(\d[\d.,]*)\s+TUBO/i),p=parse(tail)||ocrFix(tail),cm=tail.match(/\b(\d{1,2})[.,]?000\b/);
-var ds=p?p.tipo+' '+p.a+(p.tipo=='RECT'?' x '+p.b:'')+' x '+p.esp:'';
+function ocrParse(t){var L=t.split('\n'),rows=[],miss=[],lo=[],c=0;
+L.forEach(function(x,j){lo[j]=c;c+=(x.match(/LOCALIZ/gi)||[]).length});
+for(var i=0;i<L.length;i++){var s=L[i];if(!/TUBO/i.test(s))continue;
+var ti=s.search(/TUBO/i),tail=s.slice(ti),hd=numsOf(s.slice(0,ti)),p=parse(tail)||ocrFix(tail),cm=tail.match(/\b(\d{1,2})[.,]?000\b/),ds=p?p.tipo+' '+p.a+(p.tipo=='RECT'?' x '+p.b:'')+' x '+p.esp:'';
 if(!p||!cm){miss.push({raw:tail,desc:ds,comp:cm?+cm[1]:0});continue}
-var rest=tail.slice(tail.indexOf(cm[0])+cm[0].length).match(/\d[\d.,]*/g)||[],pz=parseInt((rest[0]||'').replace(/[.,]/g,'')),kg=parseInt((rest[1]||'').replace(/[.,]/g,'')),loc='',locs=[];
-for(var j=i;j<Math.min(L.length,i+3);j++){var k0=L[j].search(/LOCALIZ/i);if(k0>=0){locs=L[j].slice(k0).replace(/^LOCALIZ[^\s:]*[:\s]*/i,'').split(/[\s,;\/]+/).filter(function(t){return /^[A-Za-z0-9]{4,7}$/.test(t)}).map(function(t){return t.toUpperCase().replace(/O/g,'0').replace(/I/g,'1')}).filter(function(t,x,r){return r.indexOf(t)==x}).slice(0,3);loc=locs[0]||'';break}}
-if(!m||!pz||!kg||pz>9999||kg<100){miss.push({raw:tail,desc:ds,comp:+cm[1]});continue}
-S.lines.push(Object.assign(p,{id:S.nid++,comp:+cm[1],pecas:pz,atados:nm(m[1].replace(/\./g,''))||1,kg:kg,loc:loc,locs:locs.length>1?locs:null,mine:false,B:0,A:0,rot:false}));n++}
-rl();return{n:n,miss:miss}}
+var comp=+cm[1],rest=numsOf(tail.slice(tail.indexOf(cm[0])+cm[0].length)),at=hd.length?nm(hd[hd.length-1].replace(/\./g,'')):0,mt=hd.length>1?nf(hd[hd.length-2]):0,cands=[[iv(rest[0]),iv(rest[1])]];
+if(rest.length>2){if(/^\d{3}$/.test(rest[2])&&rest[1].length<=3)cands.push([iv(rest[0]),iv(rest[1]+rest[2])]);if(/^\d{3}$/.test(rest[1])&&rest[0].length<=3)cands.push([iv(rest[0]+rest[1]),iv(rest[2])])}
+var pz=0,kg=0,bs=-9;cands.forEach(function(q){var z=q[0],k=q[1],sc=0;if(!z||!k)return;if(z<=9999&&k>=100)sc+=1;if(mt&&Math.abs(z*comp-mt)<=1)sc+=2;var f=kgm(p.tipo,p.a,p.b,p.esp)*z*comp;if(f>0&&Math.abs(k-f)/f<=.06)sc+=2;if(sc>bs){bs=sc;pz=z;kg=k}});
+var locs=[],li=null;for(var j=i;j<Math.min(L.length,i+3);j++){if(/LOCALIZ/i.test(L[j])){locs=extractLocs(L[j]);li=lo[j];break}}
+if(!at||!pz||!kg||pz>9999||kg<100){miss.push({raw:tail,desc:ds,comp:comp});continue}
+var ok=locs.filter(isLoc),r=Object.assign(p,{comp:comp,pecas:pz,atados:at,kg:kg,mt:mt,loc:ok[0]||locs[0]||'',locs:locs.length>1?locs:null,locBad:locs.length?!ok.length:false,locIdx:li,mine:false,B:0,A:0,rot:false});r.chk=chkOf(r);rows.push(r)}
+return{rows:rows,miss:miss}}
+function wordsOf(d){if(d.words&&d.words.length)return d.words;var o=[];(d.blocks||[]).forEach(function(b){(b.paragraphs||[]).forEach(function(p){(p.lines||[]).forEach(function(l){(l.words||[]).forEach(function(w){o.push(w)})})})});return o}
+async function readOnce(w,cv){var r=await w.recognize(cv),t=r.data.text,o=ocrParse(t);o.t=t;o.cv=cv;o.words=wordsOf(r.data);o.nloc=(t.match(/LOCALIZ/gi)||[]).length;return o}
+function good(o){return o.rows.length>0&&!o.miss.length&&o.rows.every(function(r){return !r.chk.length&&r.loc&&!r.locBad})}
+function score(o){return o.rows.length*10+o.rows.filter(function(r){return !r.chk.length}).length*3+o.rows.filter(function(r){return r.loc&&!r.locBad}).length*2-o.miss.length*4}
+function rk2(r){return r.tipo+r.a+'x'+r.b+'x'+r.esp+'/'+r.comp+'/'+r.atados}
+function mergeO(b,o){b.rows.forEach(function(r){var q=o.rows.filter(function(x){return rk2(x)==rk2(r)})[0];if(!q)return;
+if(r.chk.length&&!q.chk.length){r.pecas=q.pecas;r.kg=q.kg;r.mt=q.mt;r.chk=q.chk}
+if((!r.loc||r.locBad)&&q.loc&&!q.locBad){r.loc=q.loc;r.locs=q.locs;r.locBad=false;r.locIdx=null}});return b}
+async function locPass(w,o){var ws=(o.words||[]).filter(function(x){return /^LOCALIZ/i.test(x.text||'')}),rs=o.rows.filter(function(r){return(!r.loc||r.locBad)&&r.locIdx!=null}).slice(0,6),n=0;
+if(!rs.length||ws.length!=o.nloc)return 0;
+await w.setParameters({tessedit_pageseg_mode:'7',tessedit_char_whitelist:'LOCALIZAES:FABCDE0123456789 '});
+for(var q=0;q<rs.length;q++){var r=rs[q],wd=ws[r.locIdx];if(!wd||!wd.bbox)continue;var bb=wd.bbox,h=Math.max(8,bb.y1-bb.y0),ww=bb.x1-bb.x0,x0=Math.max(0,bb.x0-4),y0=Math.max(0,bb.y0-h*.35),cw=Math.min(o.cv.width-x0,ww*3.4+8),ch=Math.min(o.cv.height-y0,h*1.7),k=Math.max(1,Math.min(4,90/h)),c=document.createElement('canvas');
+c.width=Math.round(cw*k);c.height=Math.round(ch*k);c.getContext('2d').drawImage(o.cv,x0,y0,cw,ch,0,0,c.width,c.height);
+var lc=extractLocs((await w.recognize(c)).data.text),ok=lc.filter(isLoc);if(ok.length){r.loc=ok[0];r.locs=lc.length>1?lc:null;r.locBad=false;n++}}
+await w.setParameters({tessedit_pageseg_mode:'6',tessedit_char_whitelist:''});return n}
+function totalExp(t){var m=/PESO[^\n]{0,15}EXPED[^\d\n]{0,30}(\d[\d .,]*\d)/i.exec(t),v=m?nf(m[1]):0;return v>100?v:0}
+function commit(o){o.rows.forEach(function(r){r.id=S.nid++;r.mine=OWN.indexOf(wh(r.loc))>=0;delete r.locIdx;S.lines.push(r)});rl();return o.rows.length}
 function kgm(tp,a,b,e){return(tp=='RED'?Math.PI*e*(a-e):2*e*(a+b-2*e))*0.00785}
 function qs(v){var q=v.toLowerCase().replace(/,/g,'.').replace(/[øⵀ⌀]/g,'').replace(/\s+/g,''),r=G('qr');if(!q){r.innerHTML='';return}
 var ks=Object.keys(DB).filter(function(k){return k==q||k.split('x').indexOf(q)>=0||k.indexOf(q)==0||(q.indexOf('x')>0&&k==q.split('x').sort(function(a,b){return b-a}).join('x'))}).slice(0,8);
@@ -162,41 +223,55 @@ var a=p[0],b=R?a:p[1],tp=R?'RED':(a==b?'QUAD':'RECT'),n=v[0]*at;
 S.lines.push({tipo:tp,a:a,b:b,esp:e,comp:L,pecas:n,atados:at,kg:Math.round(n*kgm(tp,a,b,e)*L),loc:G('qlo').value.trim().toUpperCase(),id:S.nid++,mine:true,B:0,A:0,rot:false,est:true});
 G('q').value='';G('qr').innerHTML='<div class="m">Adicionado (peso estimado, marcado com ~).</div>';rl()}
 G('ocr').onclick=async function(){var f=LF||G('f').files[0];if(!f){G('st').textContent='Escolhe primeiro a foto do mapa.';return}
-G('pv').src=URL.createObjectURL(f);G('pv').style.display='block';
-try{G('st').textContent='A preparar o leitor...';await loadT();var c=await prep(f);
-var w=await Tesseract.createWorker('por',1,{logger:function(m){if(m.status)G('st').textContent=m.status+(m.progress?' '+Math.round(m.progress*100)+'%':'')}});
-await w.setParameters({tessedit_pageseg_mode:'6'});var r=await w.recognize(c);await w.terminate();
-G('raw').textContent=r.data.text;G('rawd').style.display='block';var o=ocrLines(r.data.text);
-G('st').textContent=(o.n?('Li '+o.n+' linhas. Marca as que são tuas e confere os números.'):'Não consegui ler linhas completas.')+(o.miss.length?' '+o.miss.length+' linha(s) com números ilegíveis: "'+o.miss.map(function(x){return x.raw}).join('" | "')+'". Preenchi em "Ou escreve uma linha" o que consegui (tubo e comprimento): completa as peças, os atados e o peso a olhar para a foto.':'');
-if(o.miss.length){var q=o.miss[0];G('d').value=q.desc||q.raw;if(q.comp)G('c').value=q.comp}}
-catch(e){G('st').textContent='Erro: '+(e.message||e)}};
-G('clr').onclick=function(){if(confirm('Apagar as linhas e o plano deste mapa? (as configurações guardadas ficam)')){S.lines=[];S.order=[];S.done={};S.planned=false;rl();G('out').innerHTML='';G('pv').style.display='none';G('rawd').style.display='none';G('st').textContent=''}};
-function rl(){syncOrder();var h='<h2>2. Linhas</h2><div class="card"><div class="m">Marca as linhas que são tuas (as que têm T2, 130, G ou C escrito à mão).</div><button data-a="all">Marcar todas</button>';
-S.lines.forEach(function(l){var d=dims(l),i=l.id;h+='<div class="r"><label><input type="checkbox" data-a="mine" data-i="'+i+'"'+(l.mine?' checked':'')+'> <b>'+lab(l)+'</b></label><span class="m">'+l.comp+' m · '+l.pecas+' peças · '+l.atados+' atados · '+(l.est?'~':'')+fmt(l.kg)+' kg · '+(l.locs?'':(l.loc||'sem local'))+'</span>'+(l.locs?'<div class="lc">Local certo (a riscada é a errada): '+l.locs.map(function(x){return '<button data-a="loc" data-i="'+i+'" data-v="'+x+'"'+(x==l.loc?' class="sel"':'')+'>'+x+'</button>'}).join('')+'</div>':'<br>')+
+G('pv').src=URL.createObjectURL(f);G('pvw').style.display='block';G('crd').style.display='block';var w=null;
+try{G('st').textContent='A preparar o leitor...';await loadT();var b=await bmp(f);
+w=await Tesseract.createWorker('por',1,{logger:function(m){if(m.status)G('st').textContent=PH+m.status+(m.progress?' '+Math.round(m.progress*100)+'%':'')}});
+await w.setParameters({tessedit_pageseg_mode:'6'});
+PH='Leitura 1 · ';var o1=await readOnce(w,scaled(b,1300)),best=o1,nr=1;
+if(!good(o1)){PH='Leitura 2 · ';var o2=await readOnce(w,scaled(b,2400)),A=score(o1)>=score(o2)?o1:o2;best=mergeO(A,A===o1?o2:o1);nr=2}
+PH='Locais · ';var fx=await locPass(w,best);await w.terminate();w=null;
+G('raw').textContent=best.t;G('rawd').style.display='block';
+var n=commit(best),bad=best.rows.filter(function(r){return r.chk.length}).length,nl=best.rows.filter(function(r){return !r.loc||r.locBad}).length,pt=totalExp(best.t),sk=sum(best.rows,function(r){return r.kg}),
+tx=n?('Li '+n+' linhas ('+nr+' leitura'+(nr>1?'s':'')+'). As dos teus armazéns (T2, 130, Galvanização, Calha) ficaram marcadas: confere os números.'):'Não consegui ler linhas completas.';
+if(fx)tx+=' Corrigi '+fx+' local(is) com uma leitura ampliada.';
+if(bad)tx+=' ⚠ '+bad+' linha(s) com números que não batem certo (aviso na linha).';
+if(nl)tx+=' ⚠ '+nl+' linha(s) sem local reconhecido.';
+if(pt)tx+=Math.abs(pt-sk)>1?' ⚠ Soma dos pesos lidos '+fmt(sk)+' kg ≠ Peso Expedição '+fmt(pt)+' kg.':' Peso total confere ('+fmt(pt)+' kg).';
+if(best.miss.length)tx+=' '+best.miss.length+' linha(s) com números ilegíveis: "'+best.miss.map(function(x){return x.raw}).join('" | "')+'". Preenchi em "Ou escreve uma linha" o que consegui (tubo e comprimento): completa as peças, os atados e o peso a olhar para a foto.';
+G('st').textContent=tx;
+if(best.miss.length){var q=best.miss[0];G('d').value=q.desc||q.raw;if(q.comp)G('c').value=q.comp}}
+catch(e){G('st').textContent='Erro: '+(e.message||e);if(w){try{await w.terminate()}catch(_){}}}};
+G('clr').onclick=function(){if(confirm('Apagar as linhas e o plano deste mapa? (as configurações guardadas ficam)')){S.lines=[];S.order=[];S.done={};S.planned=false;rl();G('out').innerHTML='';G('pvw').style.display='none';G('crd').style.display='none';G('rawd').style.display='none';G('st').textContent=''}};
+function rl(){syncOrder();var h='<h2>2. Linhas</h2><div class="card"><div class="m">Marca as linhas que são tuas. As dos teus armazéns (T2, 130, Galvanização, Calha) vêm marcadas da leitura; as de outras equipas ficam por marcar.</div><button data-a="all">Marcar todas</button>';
+S.lines.forEach(function(l){var d=dims(l),i=l.id;h+='<div class="r"><label><input type="checkbox" data-a="mine" data-i="'+i+'"'+(l.mine?' checked':'')+'> <b>'+lab(l)+'</b></label><span class="m">'+l.comp+' m'+(l.est?' · peso estimado (~)':'')+'</span><br>Peças<input data-a="pc" data-i="'+i+'" type="number" value="'+l.pecas+'" style="width:64px"> Atados<input data-a="at" data-i="'+i+'" type="number" step="any" value="'+l.atados+'" style="width:56px"> kg<input data-a="kg" data-i="'+i+'" type="number" value="'+l.kg+'" style="width:72px">'+locUI(l)+chkUI(l)+
 'Config B<input type="number" data-a="B" data-i="'+i+'" placeholder="'+(d.B||'?')+'" value="'+(l.B||'')+'"> A<input type="number" data-a="A" data-i="'+i+'" placeholder="'+(d.A||'?')+'" value="'+(l.A||'')+'"> <label><input type="checkbox" data-a="rot" data-i="'+i+'"'+(l.rot?' checked':'')+'> virar</label><button data-a="star" data-i="'+i+'" title="Guardar esta configuração como padrão para este tubo">★ padrão</button><button data-a="del" data-i="'+i+'">✕</button> <span class="m">'+d.w+'×'+d.h+' cm · '+d.src+'</span></div>'});
 G('L').innerHTML=S.lines.length?h+'</div>':'';
-var c='<h2>3. Ordem das localizações</h2><div class="card"><label><input type="checkbox" data-a="ord"'+(S.useOrd?' checked':'')+'> Usar a ordem das localizações</label>'+(S.useOrd?'<div class="m">A 1.ª é a primeira a carregar (vai para o lastro).</div>':'');
-if(S.useOrd)S.order.forEach(function(x,i){c+='<div class="r">'+(i+1)+'. <b>'+(x||'(sem local)')+'</b> <button data-a="up" data-j="'+i+'">▲</button><button data-a="dn" data-j="'+i+'">▼</button></div>'});
+var cn={};expand(S.lines.filter(function(l){return l.mine})).forEach(function(r){var g=wh(r.loc);cn[g]=(cn[g]||0)+nb(r)});var c='<h2>3. Ordem dos armazéns</h2><div class="card"><label><input type="checkbox" data-a="ord"'+(S.useOrd?' checked':'')+'> Usar a ordem dos armazéns</label>'+(S.useOrd?'<div class="m">A 1.ª é a primeira a carregar (vai para o lastro).</div>':'');
+if(S.useOrd)S.order.forEach(function(x,i){c+='<div class="r">'+(i+1)+'. <b>'+(x||'(sem local)')+'</b> <span class="m">'+(cn[x]||0)+' atados</span> <button data-a="up" data-j="'+i+'">▲</button><button data-a="dn" data-j="'+i+'">▼</button></div>'});
 G('LC').innerHTML=S.order.length?c+'</div>':'';sv();if(S.planned)go()}
-document.addEventListener('change',function(e){var t=e.target,a=t.getAttribute('data-a');if(t.id=='f'||t.id=='fc'){LF=t.files[0]||null;G('st').textContent=LF?'Foto escolhida: '+LF.name:'';return}if(t.className=='dc'){dbEdit(t);return}if(a=='dsel'){dbr();return}if(!a)return;if(a=='ord'){S.useOrd=t.checked;rl();return}var l=find(t.getAttribute('data-i'));if(!l)return;
-if(a=='mine')l.mine=t.checked;else if(a=='rot')l.rot=t.checked;else if(a=='B'||a=='A')l[a]=Math.max(0,Math.round(nm(t.value)));rl()});
+document.addEventListener('change',function(e){var t=e.target,a=t.getAttribute('data-a');if(t.id=='f'||t.id=='fc'){LF=t.files[0]||null;G('st').textContent=LF?'Foto escolhida: '+LF.name:'';CR.a=0;CR.b=100;G('cr1').value=0;G('cr2').value=100;G('cv1').style.height='0';G('cv2').style.height='0';if(LF){G('pv').src=URL.createObjectURL(LF);G('pvw').style.display='block';G('crd').style.display='block'}return}if(t.className=='dc'){dbEdit(t);return}if(a=='dsel'){dbr();return}if(!a)return;if(a=='ord'){S.useOrd=t.checked;rl();return}var l=find(t.getAttribute('data-i'));if(!l)return;
+if(a=='mine')l.mine=t.checked;else if(a=='rot')l.rot=t.checked;else if(a=='B'||a=='A')l[a]=Math.max(0,Math.round(nm(t.value)));
+else if(a=='pc'||a=='at'||a=='kg'){var v=nm(t.value);if(v>0){if(a=='pc')l.pecas=v;else if(a=='at')l.atados=v;else l.kg=v;l.est=false;l.chk=chkOf(l)}}
+else if(a=='sp'){l.sp[+t.getAttribute('data-j')]=+t.value;spFix(l)}
+else if(a=='locin'){var v2=t.value.toUpperCase().replace(/[^A-Z0-9]/g,'');l.loc=v2;l.both=false;l.locBad=false;if(v2.length>=4&&KNOWN.indexOf(v2)<0&&S.known.indexOf(v2)<0)S.known.push(v2)}
+rl()});
 document.addEventListener('click',function(e){var t=e.target,a=t.getAttribute&&t.getAttribute('data-a'),id=t.getAttribute&&t.getAttribute('data-id');
 if(t.getAttribute&&t.getAttribute('data-nav')){nav(t.getAttribute('data-nav'));return}
 if(id){S.done[id]=!S.done[id];sv();draw();return}
 if(!a)return;if(a=='qpick'){qform(t.getAttribute('data-k'));return}if(a=='qadd'){qadd(t.getAttribute('data-k'));return}if(a=='dbreset'){if(confirm('Repor todos os valores originais da tabela?')){S.dbe={};sv();dbr()}return}
 var l=find(t.getAttribute('data-i'));
 if(a=='del'&&l)S.lines=S.lines.filter(function(x){return x!==l});
-else if(a=='loc'&&l){l.loc=t.getAttribute('data-v')}
+else if(a=='loc'&&l){var v=t.getAttribute('data-v');if(v=='*'){l.both=true;spFix(l)}else{l.both=false;l.loc=v;l.locBad=!isLoc(v)}}
 else if(a=='all'){S.lines.forEach(function(l){l.mine=true})}
 else if(a=='star'&&l){var d=dims(l);if(d.B&&d.A)S.defs[key(l)]=[d.B,d.A]}
 else if(a=='up'||a=='dn'){var i=+t.getAttribute('data-j'),j=a=='up'?i-1:i+1;if(j>=0&&j<S.order.length){var x=S.order[i];S.order[i]=S.order[j];S.order[j]=x}}
 else return;rl()});
-function bund(rows){var o=[];rows.forEach(function(l){var d=dims(l),N=nb(l);for(var k=0;k<N;k++)o.push({id:l.id+'-'+k,key:l.id,t:lab(l),w:d.w,h:d.h,L:Math.round(l.comp*100),kg:l.kg/N,loc:l.loc,rk:S.useOrd?Math.max(0,S.order.indexOf(l.loc)):0,c:l.id%6+1})});return o}
-function mkLanes(bs){bs.sort(function(x,y){return y.L-x.L||y.w-x.w});var ls=[];bs.forEach(function(b){var c=ls.filter(function(l){return (l.loc==b.loc||!S.useOrd)&&l.len+b.L<=LT&&Math.abs(l.w-b.w)<=8&&Math.abs(l.h-b.h)<=6});c.sort(function(p,q){return (q.k==b.key)-(p.k==b.key)||q.len-p.len});var l=c[0];
-if(!l){l={items:[],len:0,w:0,h:0,kg:0,k:b.key,loc:b.loc,rk:b.rk};ls.push(l)}l.items.push(b);l.len+=b.L;l.w=Math.max(l.w,b.w);l.h=Math.max(l.h,b.h);l.kg+=b.kg});return ls}
+function bund(rows){var o=[];rows.forEach(function(l){var d=dims(l),N=nb(l);for(var k=0;k<N;k++)o.push({id:l.id+'-'+k,key:l.pid||l.id,t:lab(l),w:d.w,h:d.h,L:Math.round(l.comp*100),kg:l.kg/N,loc:l.loc,grp:wh(l.loc),rk:S.useOrd?Math.max(0,S.order.indexOf(wh(l.loc))):0,c:(l.pid||l.id)%6+1})});return o}
+function mkLanes(bs){bs.sort(function(x,y){return y.L-x.L||y.w-x.w});var ls=[];bs.forEach(function(b){var c=ls.filter(function(l){return (l.grp==b.grp||!S.useOrd)&&l.len+b.L<=LT&&Math.abs(l.w-b.w)<=8&&Math.abs(l.h-b.h)<=6});c.sort(function(p,q){return (q.k==b.key)-(p.k==b.key)||q.len-p.len});var l=c[0];
+if(!l){l={items:[],len:0,w:0,h:0,kg:0,k:b.key,loc:b.loc,grp:b.grp,rk:b.rk};ls.push(l)}l.items.push(b);l.len+=b.L;l.w=Math.max(l.w,b.w);l.h=Math.max(l.h,b.h);l.kg+=b.kg});return ls}
 function gapR(a){var mx=Math.max.apply(0,a.map(function(l){return l.len}));return a.filter(function(l){return l.len>=mx-1}).concat(a.filter(function(l){return l.len<mx-1}))}
 function sum(a,f){return a.reduce(function(s,l){return s+f(l)},0)}
-function go(){S.planned=true;var rows=S.lines.filter(function(l){return l.mine});
+function go(){S.planned=true;var rows=expand(S.lines.filter(function(l){return l.mine}));
 if(!rows.length){G('out').innerHTML='<div class="card w">Não há linhas escolhidas.</div>';return}
 var ls=mkLanes(bund(rows)),fl=ls.slice(),top=[],wn=[],sw=function(){return sum(fl,function(l){return l.w})};
 if(sw()>W){var hh=fl.map(function(l){return l.h}).sort(function(a,b){return a-b}),md=hh[Math.floor(hh.length/2)];fl.sort(function(a,b){return b.rk-a.rk||Math.abs(b.h-md)-Math.abs(a.h-md)||a.items.length-b.items.length||b.kg-a.kg});while(fl.length>1&&sw()>W)top.push(fl.shift())}
@@ -241,7 +316,7 @@ P.strips.forEach(function(q){if(q.l==l)s+='<rect x="'+q.sx+'" y="0" width="'+q.b
 return s+'</svg>'}
 function draw(){for(var i=0;i<window.PL.n;i++)G('s'+i).innerHTML=svg(i)}
 function zv(){return S.zoom||(innerWidth<700?Math.max(120,innerWidth-28):260)}
-document.addEventListener('input',function(e){if(e.target.id=='q')qs(e.target.value);if(e.target.id=='zm'){S.zoom=+e.target.value;document.documentElement.style.setProperty('--sw',S.zoom+'px');sv()}});
+document.addEventListener('input',function(e){if(e.target.id=='cr1'||e.target.id=='cr2'){var u=e.target.id=='cr1';CR.a=+G('cr1').value;CR.b=+G('cr2').value;if(CR.b-CR.a<10){if(u)CR.a=CR.b-10;else CR.b=CR.a+10;G('cr1').value=CR.a;G('cr2').value=CR.b}G('cv1').style.height=CR.a+'%';G('cv2').style.height=(100-CR.b)+'%';return}if(e.target.id=='q')qs(e.target.value);if(e.target.id=='zm'){S.zoom=+e.target.value;document.documentElement.style.setProperty('--sw',S.zoom+'px');sv()}});
 document.documentElement.style.setProperty('--sw',zv()+'px');
 G('go').onclick=go;rl();nav('menu');
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(function(){});
