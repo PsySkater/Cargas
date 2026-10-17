@@ -17,7 +17,7 @@ input[type=checkbox]{width:auto}#d{width:100%;box-sizing:border-box}
 label{display:inline-block;margin:3px 6px 3px 0}
 button.sel{background:var(--ok);color:#fff;border-color:var(--ok);font-weight:700}.lc{margin:4px 0}.lc button{margin-right:6px}
 button{background:var(--card);color:var(--fg);border:1px solid var(--bd);border-radius:8px;padding:7px 11px;margin:3px 3px 3px 0;font-size:15px}
-.p{background:var(--ok);color:#fff;border:0}
+.p{background:var(--ok);color:#fff;border:0}button:disabled{opacity:.4}
 svg{width:100%;height:auto;display:block;background:var(--card);border:1px solid var(--bd);border-radius:12px}
 .bd{stroke:var(--fg);stroke-width:.5;cursor:pointer}.done{opacity:.4}
 text{fill:var(--fg);font-size:6.3px;pointer-events:none;text-anchor:middle}
@@ -25,9 +25,12 @@ text{fill:var(--fg);font-size:6.3px;pointer-events:none;text-anchor:middle}
 .cv{position:absolute;left:0;right:0;background:rgba(0,0,0,.5);pointer-events:none}
 </style></head><body>
 <h1>Carga</h1>
-<div id="menu"><div class="card"><button class="p big" data-nav="map">Ler mapa e calcular a carga</button><button class="big" data-nav="dbm">Base de dados</button></div></div>
+<div id="menu"><div class="card"><button class="p big" data-nav="cm">Cargas</button><button class="big" data-nav="dbm">Base de dados</button></div></div>
 <div id="bar" style="display:none"><button id="bkb" data-nav="menu">← Menu</button></div>
-<div id="scrDbm" style="display:none"><div class="card"><button class="big" data-nav="db">Configuração dos atados</button><button class="big" data-nav="loc">Localizações</button></div></div>
+<div id="scrCm" style="display:none"><div class="card"><button class="p big" data-nav="map">Carga automática</button><div class="m">Lê o mapa e a app propõe o plano de carga.</div><button class="big" data-nav="mapm">Carga manual (experimental)</button><div class="m">Lês o mapa e és tu a escolher onde vai cada atado, com medidas, pesos e avisos ao vivo.</div></div></div>
+<div id="scrMan" style="display:none"></div>
+<div id="scrDbm" style="display:none"><div class="card"><button class="big" data-nav="db">Configuração dos atados</button><button class="big" data-nav="loc">Localizações</button></div>
+<div class="card"><b>Copiar para outro telemóvel</b><div class="m">Exporta as localizações e as correções da tabela de atados e importa no outro telemóvel (por exemplo enviando o texto por WhatsApp).</div><textarea id="xfer" rows="4" style="width:100%;box-sizing:border-box" placeholder="O código aparece aqui. Para importar, cola-o aqui."></textarea><button data-a="xexp">Exportar</button><button data-a="ximp">Importar</button><div id="xmsg" class="m"></div></div></div>
 <div id="scrDb" style="display:none"></div>
 <div id="scrLoc" style="display:none"></div>
 <div id="scrMap" style="display:none">
@@ -47,10 +50,10 @@ text{fill:var(--fg);font-size:6.3px;pointer-events:none;text-anchor:middle}
 <label>Local<br><input id="lo" placeholder="F01B04"></label><br>
 <button id="add" class="p">Adicionar linha</button><div id="er" class="w"></div></div>
 <div id="L"></div><div id="LC"></div>
-<button id="go" class="p">Gerar plano</button><button id="clr">Limpar mapa</button>
+<button id="go" class="p">Gerar plano</button><button id="gom" class="p big" data-nav="man" style="display:none">Montar a carga manualmente →</button><button id="clr">Limpar mapa</button>
 <div id="out"></div></div>
 <script>
-var S={lines:[],order:[],defs:{},done:{},nid:1,planned:false,useOrd:true,zoom:0,dbe:{},known:[],lw:null},O=[],LT=1360,W=245;
+var S={lines:[],order:[],defs:{},done:{},nid:1,planned:false,useOrd:true,zoom:0,dbe:{},known:[],lw:null,man:null},O=[],LT=1360,W=245;
 try{S=Object.assign(S,JSON.parse(localStorage.getItem('carga1')||'{}'))}catch(e){}
 function sv(){try{localStorage.setItem('carga1',JSON.stringify(S))}catch(e){}}
 var G=function(i){return document.getElementById(i)},nm=function(x){return parseFloat(String(x).replace(',','.'))||0};
@@ -158,11 +161,89 @@ function cell(d,li,c){var e=S.dbe[d+'|'+li+'|'+c];return e!==undefined?e:DB[d][l
 function pc(v){var m=/^(\d+)\/(\d+)x(\d+)$/.exec(v||'');return m?[+m[1],+m[2],+m[3]]:null}
 function dkey(l){if(l.tipo=='RED'){var d=l.a==51?50:l.a;return DB[String(d)]?String(d):null}var k=Math.max(l.a,l.b)+'x'+Math.min(l.a,l.b);return DB[k]?k:null}
 function tcell(l){var k=dkey(l);if(!k||l.esp>8)return null;var e=l.esp,c=e<=2?0:e<=3?1:e<=4?2:e<=5?3:e<=6?4:5;return pc(cell(k,l.comp<=9?0:1,c))}
-function nav(x){var sub=x=='db'||x=='loc';G('menu').style.display=x=='menu'?'block':'none';G('bar').style.display=x=='menu'?'none':'block';G('scrMap').style.display=x=='map'?'block':'none';G('scrDbm').style.display=x=='dbm'?'block':'none';G('scrDb').style.display=x=='db'?'block':'none';G('scrLoc').style.display=x=='loc'?'block':'none';var b=G('bkb');b.setAttribute('data-nav',sub?'dbm':'menu');b.textContent=sub?'← Base de dados':'← Menu';if(x=='db')dbr();if(x=='loc')locr();if(x=='map')rl();window.scrollTo(0,0)}
+var SC={menu:'menu',cm:'scrCm',map:'scrMap',mapm:'scrMap',man:'scrMan',dbm:'scrDbm',db:'scrDb',loc:'scrLoc'},BK={cm:'menu',map:'cm',mapm:'cm',man:'mapm',dbm:'menu',db:'dbm',loc:'dbm'},BL={menu:'← Menu',cm:'← Cargas',mapm:'← Linhas',dbm:'← Base de dados'},MODE='auto';
+function nav(x){MODE=(x=='mapm'||x=='man')?'man':'auto';['menu','scrCm','scrMap','scrMan','scrDbm','scrDb','scrLoc'].forEach(function(i){G(i).style.display=i==SC[x]?'block':'none'});G('bar').style.display=x=='menu'?'none':'block';var b=G('bkb'),t=BK[x]||'menu';b.setAttribute('data-nav',t);b.textContent=BL[t];
+if(x=='map'||x=='mapm'){var m=MODE=='man';G('go').style.display=m?'none':'inline-block';G('out').style.display=m?'none':'block';G('LC').style.display=m?'none':'block';G('gom').style.display=m?'block':'none';rl()}
+if(x=='db')dbr();if(x=='loc')locr();if(x=='man')mr();window.scrollTo(0,0)}
 function locr(){lwInit();var cur=(G('lsel')&&WH.indexOf(G('lsel').value)>=0)?G('lsel').value:WH[0],L=S.lw[cur],h='<div class="card"><h2 style="text-align:center">LOCALIZAÇÕES</h2><label>Armazém <select id="lsel" data-a="lsel">'+WH.map(function(w){return '<option'+(w==cur?' selected':'')+'>'+w+'</option>'}).join('')+'</select></label><div class="m">'+L.length+' localizações guardadas. As que adicionares passam a ser reconhecidas na leitura do mapa.</div>';
 L.forEach(function(c){h+='<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><b style="font-size:17px;flex:1">'+c+'</b><button data-a="ldel" data-c="'+c+'">✕</button></div>'});
 if(!L.length)h+='<div class="m">Ainda não há localizações neste armazém.</div>';
 G('scrLoc').innerHTML=h+'<button class="p big" data-a="ladd">Adicionar localização +</button><button data-a="lreset">Repor localizações originais</button></div>'}
+function xfer(a){var ta=G('xfer'),m=G('xmsg');lwInit();
+if(a=='xexp'){var c='CARGA1:'+btoa(unescape(encodeURIComponent(JSON.stringify({lw:S.lw,dbe:S.dbe,known:S.known}))));ta.value=c;ta.focus();ta.select();var fb='Seleciona o texto, copia e cola no outro telemóvel.';try{navigator.clipboard.writeText(c).then(function(){m.textContent='Copiado. Cola no outro telemóvel (WhatsApp, etc.) e usa Importar.'},function(){m.textContent=fb})}catch(e){m.textContent=fb}return}
+var v=(ta.value||'').replace(/\s+/g,'');if(v.indexOf('CARGA1:')!=0){m.textContent='Cola primeiro o código exportado (começa por CARGA1:).';return}
+var d;try{d=JSON.parse(decodeURIComponent(escape(atob(v.slice(7)))))}catch(e){m.textContent='Código inválido ou incompleto.';return}
+if(!d||typeof d.lw!='object'||!d.lw){m.textContent='Código inválido.';return}
+if(!confirm('Importar? Isto substitui as localizações e as correções da tabela de atados deste telemóvel.'))return;
+var o={},n=0,k;WH.forEach(function(w){o[w]=(Array.isArray(d.lw[w])?d.lw[w]:[]).filter(function(c){return typeof c=='string'&&/^[A-Z0-9]{4,7}$/.test(c)});n+=o[w].length});
+S.lw=o;if(d.dbe&&typeof d.dbe=='object'){S.dbe={};for(k in d.dbe)if(typeof d.dbe[k]=='string')S.dbe[k]=d.dbe[k]}
+if(Array.isArray(d.known))d.known.forEach(function(c){if(typeof c=='string'&&/^[A-Z0-9]{4,7}$/.test(c)&&S.known.indexOf(c)<0)S.known.push(c)});
+syncKnown();sv();m.textContent='Importado: '+n+' localizações e '+Object.keys(S.dbe).length+' correções da tabela.'}
+
+var MSEL=null;
+function mInit(){if(!S.man||!S.man.lay)S.man={lay:[{off:null,rows:[]},{off:null,rows:[]}],rot:{}};if(!S.man.rot)S.man.rot={}}
+function mPool(){var bs=bund(expand(S.lines.filter(function(l){return l.mine}))),m={};bs.forEach(function(b){m[b.id]=b});return{list:bs,map:m}}
+function mdim(b){return S.man.rot[b.id]?{w:b.h,h:b.w}:{w:b.w,h:b.h}}
+function mPlaced(){var p={};S.man.lay.forEach(function(L){L.rows.forEach(function(r){r.forEach(function(i){p[i]=1})})});return p}
+function mSync(P){var seen={};S.man.lay.forEach(function(L){L.rows=L.rows.map(function(r){return r.filter(function(i){if(!P.map[i]||seen[i])return false;seen[i]=1;return true})}).filter(function(r){return r.length})});if(MSEL&&!P.map[MSEL])MSEL=null}
+function mWhere(id){var r=null;S.man.lay.forEach(function(L,li){L.rows.forEach(function(row,ri){var k=row.indexOf(id);if(k>=0)r={l:li,r:ri,k:k}})});return r}
+function mLayout(P){var O=[],R=[];
+S.man.lay.forEach(function(L,li){var rw=L.rows.map(function(r){return Math.max.apply(0,r.map(function(i){return mdim(P.map[i]).w}))}),tw=sum(rw,function(x){return x}),x0=L.off==null?(W-tw)/2:L.off,x=x0,info=[];
+L.rows.forEach(function(r,ri){var y=0,kg=0;r.forEach(function(i){var b=P.map[i],d=mdim(b);O.push({id:i,l:li,r:ri,x:x+(rw[ri]-d.w)/2,y:y,w:d.w,h:d.h,L:b.L,kg:b.kg,b:b});y+=b.L;kg+=b.kg});info.push({x:x,w:rw[ri],len:y,kg:kg,n:r.length});x+=rw[ri]});
+R.push({tw:tw,x0:x0,rows:info})});
+O.forEach(function(b){if(b.l==0)return;var a=0;O.forEach(function(q){if(q.l!=b.l-1)return;var ox=Math.min(b.x+b.w,q.x+q.w)-Math.max(b.x,q.x),oy=Math.min(b.y+b.L,q.y+q.L)-Math.max(b.y,q.y);if(ox>0&&oy>0)a+=ox*oy});b.weak=a<.6*b.w*b.L});
+return{O:O,R:R}}
+function mSvg(li,X,P){var s='<svg viewBox="0 -24 '+W+' '+(LT+48)+'"><rect x="0" y="0" width="'+W+'" height="'+LT+'" fill="none" stroke="currentColor" stroke-width="1"/><text x="'+W/2+'" y="-8" style="font-size:9px">▲ FRENTE (cabine)</text><text x="'+W/2+'" y="'+(LT+16)+'" style="font-size:9px">TRASEIRA ▼</text>';
+if(li>0)X.O.forEach(function(b){if(b.l==li-1)s+='<rect x="'+b.x+'" y="'+b.y+'" width="'+b.w+'" height="'+b.L+'" fill="none" stroke="var(--mut)" stroke-dasharray="3 3" stroke-width=".4" style="pointer-events:none"/>'});
+X.R[li].rows.forEach(function(r,ri){s+='<rect data-a="M_row" data-l="'+li+'" data-r="'+ri+'" x="'+r.x+'" y="0" width="'+r.w+'" height="'+LT+'" fill="rgba(128,128,128,.07)" stroke="var(--mut)" stroke-width=".3" stroke-dasharray="2 3"/><text x="'+(r.x+r.w/2)+'" y="10" style="font-size:9px">F'+(ri+1)+'</text>'});
+X.O.forEach(function(b){if(b.l!=li)return;var cx=b.x+b.w/2,cy=b.y+b.L/2,on=b.id==MSEL;s+='<rect class="bd" data-a="M_sel" data-b="'+b.id+'" x="'+b.x+'" y="'+b.y+'" width="'+b.w+'" height="'+b.L+'" fill="var(--b'+b.b.c+')"'+(on?' style="stroke:var(--ok);stroke-width:3"':b.weak?' style="stroke:#b3402a;stroke-width:2"':'')+'/><text x="'+cx+'" y="'+(cy-8)+'">'+b.b.t+'</text><text x="'+cx+'" y="'+(cy+2)+'">'+fmt(b.kg)+' kg</text><text x="'+cx+'" y="'+(cy+10)+'">'+Math.round(b.w)+'×'+Math.round(b.h)+' cm</text><text x="'+cx+'" y="'+(cy+18)+'">'+(b.b.loc||'')+'</text>'});
+if(li+1<S.man.lay.length&&S.man.lay[li+1].rows.length){var u=X.R[li+1],bt=u.tw<=108?120:240,sx=Math.max(0,Math.min(W-bt,u.x0+u.tw/2-bt/2));s+='<rect x="'+sx+'" y="0" width="'+bt+'" height="'+LT+'" fill="none" stroke="var(--ok)" stroke-width="1" stroke-dasharray="5 4" style="pointer-events:none"/>'}
+return s+'</svg>'}
+function mr(){mInit();var P=mPool();mSync(P);
+if(!P.list.length){G('scrMan').innerHTML='<div class="card w">Não há linhas escolhidas. Volta atrás e marca as linhas que são tuas.</div>';sv();return}
+var X=mLayout(P),O=X.O,pl=mPlaced(),rest=P.list.filter(function(b){return !pl[b.id]}),wn=[],h='',LY=S.man.lay;
+var Mx=Math.max.apply(0,O.map(function(b){return b.y+b.L}))/2,f=0,r=0,e=0,d=0;O.forEach(function(b){var q=Math.max(0,Math.min(b.y+b.L,Mx)-b.y)/b.L;f+=b.kg*q;r+=b.kg*(1-q);var ql=Math.max(0,Math.min(b.x+b.w,W/2)-b.x)/b.w;e+=b.kg*ql;d+=b.kg*(1-ql)});
+var inf=[];
+LY.forEach(function(L,li){var R=X.R[li];if(!L.rows.length)return;
+if(R.tw>W)wn.push('Camada '+(li+1)+': largura '+Math.round(R.tw)+' cm, passa os '+W+' cm do camião.');
+else if(R.x0<-.5||R.x0+R.tw>W+.5)wn.push('Camada '+(li+1)+': está deslocada e sai do camião (usa «Centrar»).');
+R.rows.forEach(function(q,ri){if(q.len>LT)wn.push('Camada '+(li+1)+', fila '+(ri+1)+': '+q.len+' cm, maior que o camião ('+LT+' cm).')});
+if(li>0){var wk=O.filter(function(b){return b.l==li&&b.weak}).length;if(wk)wn.push('Camada '+(li+1)+': '+wk+' atado(s) com pouco apoio por baixo (a vermelho).');
+var bt=R.tw<=108?120:240,sx=Math.max(0,Math.min(W-bt,R.x0+R.tw/2-bt/2)),hs=O.filter(function(b){return b.l==li-1&&b.x<sx+bt&&b.x+b.w>sx}).map(function(b){return b.h});
+if(hs.length){var df=Math.round(Math.max.apply(0,hs)-Math.min.apply(0,hs));if(df>6)wn.push('Camada '+(li+1)+': chão desnivelado '+df+' cm na faixa dos barrotes ('+bt+' cm, a tracejado). Aceita-se até 4–6 cm.');else inf.push('camada '+(li+1)+': barrotes de '+bt+' cm, chão com '+df+' cm de diferença')}}});
+h+='<div class="card m">'+(O.length?'Total '+fmt(f+r)+' kg · frente '+fmt(f)+' · trás '+fmt(r)+' · esquerda '+fmt(e)+' · direita '+fmt(d)+'<br>':'')+O.length+' de '+P.list.length+' atados colocados'+(rest.length?' · faltam '+fmt(sum(rest,function(b){return b.kg}))+' kg':' ✓')+(inf.length?'<br>'+inf.join('<br>'):'')+'</div>';
+if(wn.length)h+='<div class="card w">'+wn.join('<br>')+'</div>';
+if(!O.length)h+='<div class="card m"><b>Como usar</b><br>1. Toca num atado da lista «Por colocar».<br>2. Toca em «+ Nova fila» numa camada (ou em «Pôr aqui» numa fila que já exista).<br>3. Toca num atado do desenho para o virar, mover ou tirar. Os atados encostam à frente (cabine), por ordem.</div>';
+var gk={},ord=[];rest.forEach(function(b){if(!gk[b.key]){gk[b.key]=[];ord.push(b.key)}gk[b.key].push(b)});
+h+='<h2>Por colocar</h2><div class="card">'+(ord.length?ord.map(function(k){var b=gk[k][0],on=MSEL&&!pl[MSEL]&&P.map[MSEL].key==k;return '<button data-a="M_pick" data-k="'+k+'"'+(on?' class="sel"':'')+'>'+b.t+' · '+b.w+'×'+b.h+' cm · '+fmt(b.kg)+' kg ×'+gk[k].length+'</button>'}).join(''):'<span class="m">Tudo colocado ✓</span>')+'</div>';
+if(MSEL){var sb=P.map[MSEL],sd=mdim(sb),wh2=mWhere(MSEL);h+='<div class="card"><b>Selecionado:</b> '+sb.t+' · '+Math.round(sd.w)+'×'+Math.round(sd.h)+' cm · '+fmt(sb.kg)+' kg'+(S.man.rot[MSEL]?' (virado)':'')+(wh2?' · camada '+(wh2.l+1)+', fila '+(wh2.r+1):' · por colocar')+'<br><button data-a="M_rot">Virar</button>'+(wh2?'<button data-a="M_fw">▲ Para a frente</button><button data-a="M_bw">▼ Para trás</button><button data-a="M_rm">Tirar</button>':'')+'<button data-a="M_cancel">Cancelar</button></div>'}
+h+='<div class="card m">Tamanho do desenho <input type="range" id="zmm" min="120" max="800" step="10" value="'+zv()+'" style="width:60%"></div><div class="lays">';
+LY.forEach(function(L,li){var R=X.R[li];h+='<div><h2>'+(li+1)+'.ª camada'+(li?'':' (chão)')+'</h2><div style="width:var(--sw,100%);max-width:100%"><div class="m">'+L.rows.length+' filas · '+Math.round(R.tw)+' cm de largura</div><button data-a="M_newrow" data-l="'+li+'"'+(MSEL?'':' disabled')+'>+ Nova fila</button><button data-a="M_shl" data-l="'+li+'">◀ 5 cm</button><button data-a="M_shr" data-l="'+li+'">5 cm ▶</button><button data-a="M_ctr" data-l="'+li+'">Centrar</button>'+(li>=2&&!L.rows.length?'<button data-a="M_dellay" data-l="'+li+'">Apagar camada</button>':'');
+L.rows.forEach(function(row,ri){var q=R.rows[ri],lastb=P.map[row[row.length-1]],can=rest.some(function(b){return b.key==lastb.key});h+='<div class="r"><b>Fila '+(ri+1)+'</b> <span class="m">'+Math.round(q.w)+' cm · '+q.n+' atado(s) · '+q.len+'/'+LT+' cm · '+fmt(q.kg)+' kg</span><br><button data-a="M_put" data-l="'+li+'" data-r="'+ri+'"'+(MSEL?'':' disabled')+'>Pôr aqui</button><button data-a="M_same" data-l="'+li+'" data-r="'+ri+'"'+(can?'':' disabled')+'>+1 igual</button><button data-a="M_rl" data-l="'+li+'" data-r="'+ri+'"'+(ri?'':' disabled')+'>◀</button><button data-a="M_rr" data-l="'+li+'" data-r="'+ri+'"'+(ri<L.rows.length-1?'':' disabled')+'>▶</button><button data-a="M_rowdel" data-l="'+li+'" data-r="'+ri+'">✕</button></div>'});
+h+='</div><div class="sv">'+mSvg(li,X,P)+'</div></div>'});
+h+='</div><button data-a="M_addlay">+ Camada</button><button data-a="M_clear">Limpar tudo</button>';
+G('scrMan').innerHTML=h;sv()}
+function mact(a,t){mInit();var P=mPool(),ly=S.man.lay,id=MSEL,gl=function(n){return +t.getAttribute(n)};
+function rem(i){ly.forEach(function(L){L.rows.forEach(function(r){var k=r.indexOf(i);if(k>=0)r.splice(k,1)})})}
+function cl(){ly.forEach(function(L){L.rows=L.rows.filter(function(r){return r.length})})}
+function nextOf(key){var pl=mPlaced();return P.list.filter(function(b){return b.key==key&&!pl[b.id]})[0]}
+if(a=='M_pick'){var nb=nextOf(t.getAttribute('data-k'));MSEL=nb?nb.id:null}
+else if(a=='M_sel'){MSEL=t.getAttribute('data-b')}
+else if(a=='M_cancel'){MSEL=null}
+else if(a=='M_rot'){if(id)S.man.rot[id]=!S.man.rot[id]}
+else if(a=='M_rm'){if(id){rem(id);cl()}}
+else if(a=='M_fw'||a=='M_bw'){var w=id&&mWhere(id);if(w){var row=ly[w.l].rows[w.r],j=a=='M_fw'?w.k-1:w.k+1;if(j>=0&&j<row.length){var x=row[w.k];row[w.k]=row[j];row[j]=x}}}
+else if(a=='M_put'||a=='M_newrow'){if(id&&P.map[id]){var was=mPlaced()[id],L=ly[gl('data-l')],tg=a=='M_newrow'?[]:L.rows[gl('data-r')];if(a=='M_newrow')L.rows.push(tg);if(tg){rem(id);tg.push(id);cl();if(was)MSEL=null;else{var n2=nextOf(P.map[id].key);MSEL=n2?n2.id:null}}}}
+else if(a=='M_same'){var row2=ly[gl('data-l')].rows[gl('data-r')],lb=row2&&P.map[row2[row2.length-1]],n3=lb&&nextOf(lb.key);if(n3){row2.push(n3.id);if(id==n3.id){var n5=nextOf(lb.key);MSEL=n5?n5.id:null}}}
+else if(a=='M_row'){if(id&&P.map[id]){var was2=mPlaced()[id],tg2=ly[gl('data-l')].rows[gl('data-r')];if(tg2){rem(id);tg2.push(id);cl();if(was2)MSEL=null;else{var n4=nextOf(P.map[id].key);MSEL=n4?n4.id:null}}}}
+else if(a=='M_rl'||a=='M_rr'){var rs=ly[gl('data-l')].rows,i1=gl('data-r'),j1=a=='M_rl'?i1-1:i1+1;if(j1>=0&&j1<rs.length){var y=rs[i1];rs[i1]=rs[j1];rs[j1]=y}}
+else if(a=='M_rowdel'){ly[gl('data-l')].rows.splice(gl('data-r'),1)}
+else if(a=='M_shl'||a=='M_shr'){var li=gl('data-l'),x0=mLayout(P).R[li].x0;ly[li].off=Math.round(x0+(a=='M_shl'?-5:5))}
+else if(a=='M_ctr'){ly[gl('data-l')].off=null}
+else if(a=='M_addlay'){ly.push({off:null,rows:[]})}
+else if(a=='M_dellay'){var dl=gl('data-l');if(ly.length>2&&!ly[dl].rows.length)ly.splice(dl,1)}
+else if(a=='M_clear'){if(confirm('Limpar toda a carga manual e voltar a pôr os atados na lista?')){S.man=null;MSEL=null;mInit()}}
+mr()}
 function locAct(a,t){var cur=G('lsel').value;
 if(a=='ladd'){var v=prompt('Nova localização em '+cur+' (ex.: F01B11):');if(v===null)return;v=v.toUpperCase().replace(/[^A-Z0-9]/g,'');var er='';if(v.length<4||v.length>7)er='Código inválido: usa 4 a 7 letras ou números.';else{var w=WH.filter(function(x){return S.lw[x].indexOf(v)>=0})[0];if(w)er=v+' já existe em '+w+'.'}
 if(er){alert(er);return}S.lw[cur].push(v);S.lw[cur].sort();S.known=S.known.filter(function(x){return x!=v});syncKnown();sv();locr()}
@@ -271,7 +352,7 @@ rl()});
 document.addEventListener('click',function(e){var t=e.target,a=t.getAttribute&&t.getAttribute('data-a'),id=t.getAttribute&&t.getAttribute('data-id');
 if(t.getAttribute&&t.getAttribute('data-nav')){nav(t.getAttribute('data-nav'));return}
 if(id){S.done[id]=!S.done[id];sv();draw();return}
-if(a=='ladd'||a=='ldel'||a=='lreset'){locAct(a,t);return}if(!a)return;if(a=='qpick'){qform(t.getAttribute('data-k'));return}if(a=='qadd'){qadd(t.getAttribute('data-k'));return}if(a=='dbreset'){if(confirm('Repor todos os valores originais da tabela?')){S.dbe={};sv();dbr()}return}
+if(a&&a.indexOf('M_')==0){mact(a,t);return}if(a=='xexp'||a=='ximp'){xfer(a);return}if(a=='ladd'||a=='ldel'||a=='lreset'){locAct(a,t);return}if(!a)return;if(a=='qpick'){qform(t.getAttribute('data-k'));return}if(a=='qadd'){qadd(t.getAttribute('data-k'));return}if(a=='dbreset'){if(confirm('Repor todos os valores originais da tabela?')){S.dbe={};sv();dbr()}return}
 var l=find(t.getAttribute('data-i'));
 if(a=='del'&&l)S.lines=S.lines.filter(function(x){return x!==l});
 else if(a=='loc'&&l){var v=t.getAttribute('data-v');if(v=='*'){l.both=true;spFix(l)}else{l.both=false;l.loc=v;l.locBad=!isLoc(v)}}
@@ -329,7 +410,7 @@ P.strips.forEach(function(q){if(q.l==l)s+='<rect x="'+q.sx+'" y="0" width="'+q.b
 return s+'</svg>'}
 function draw(){for(var i=0;i<window.PL.n;i++)G('s'+i).innerHTML=svg(i)}
 function zv(){return S.zoom||(innerWidth<700?Math.max(120,innerWidth-28):260)}
-document.addEventListener('input',function(e){if(e.target.id=='cr1'||e.target.id=='cr2'){var u=e.target.id=='cr1';CR.a=+G('cr1').value;CR.b=+G('cr2').value;if(CR.b-CR.a<10){if(u)CR.a=CR.b-10;else CR.b=CR.a+10;G('cr1').value=CR.a;G('cr2').value=CR.b}G('cv1').style.height=CR.a+'%';G('cv2').style.height=(100-CR.b)+'%';return}if(e.target.id=='q')qs(e.target.value);if(e.target.id=='zm'){S.zoom=+e.target.value;document.documentElement.style.setProperty('--sw',S.zoom+'px');sv()}});
+document.addEventListener('input',function(e){if(e.target.id=='cr1'||e.target.id=='cr2'){var u=e.target.id=='cr1';CR.a=+G('cr1').value;CR.b=+G('cr2').value;if(CR.b-CR.a<10){if(u)CR.a=CR.b-10;else CR.b=CR.a+10;G('cr1').value=CR.a;G('cr2').value=CR.b}G('cv1').style.height=CR.a+'%';G('cv2').style.height=(100-CR.b)+'%';return}if(e.target.id=='q')qs(e.target.value);if(e.target.id=='zm'||e.target.id=='zmm'){S.zoom=+e.target.value;document.documentElement.style.setProperty('--sw',S.zoom+'px');sv()}});
 document.documentElement.style.setProperty('--sw',zv()+'px');
 G('go').onclick=go;rl();nav('menu');
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(function(){});
