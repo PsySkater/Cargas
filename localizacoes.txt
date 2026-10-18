@@ -1,0 +1,12 @@
+# Localizações dos armazéns (lido pela app ao abrir).
+# Formato: Armazém: código código código  (separados por espaço ou vírgula).
+# Armazéns aceites: T2, 130 6 m, 130 12 m, Galvanização, Calha, Fábrica de cima, Fábrica nova.
+# Linhas a começar por # são comentários. Códigos: 4 a 7 letras ou números.
+# Os códigos F03…, F04…, F05…, F06…, F09… e do tipo 3E23 já são reconhecidos como fábrica sem estarem aqui.
+T2: F01B01 F01B02 F01B03 F01B04 F01B05 F01B06 F01B07 F01B08 F01B09 F01B10
+130 6 m: F01C01 F01C02 F01C03 F01C04 F01C05 F01C06 F01C07
+130 12 m: F01D01 F01D02 F01D03 F01D04 F01D05 F01D06 F01D07
+Galvanização: F0200 F02A00
+Calha: F1100
+Fábrica de cima:
+Fábrica nova:

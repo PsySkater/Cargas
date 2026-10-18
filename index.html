@@ -30,7 +30,7 @@ text{fill:var(--fg);font-size:6.3px;pointer-events:none;text-anchor:middle}
 <div id="scrCm" style="display:none"><div class="card"><button class="p big" data-nav="map">Carga automática</button><div class="m">Lê o mapa e a app propõe o plano de carga.</div><button class="big" data-nav="mapm">Carga manual (experimental)</button><div class="m">Lês o mapa e és tu a escolher onde vai cada atado, com medidas, pesos e avisos ao vivo.</div></div></div>
 <div id="scrMan" style="display:none"></div>
 <div id="scrDbm" style="display:none"><div class="card"><button class="big" data-nav="db">Configuração dos atados</button><button class="big" data-nav="loc">Localizações</button></div>
-<div class="card"><b>Copiar para outro telemóvel</b><div class="m">Exporta as localizações e as correções da tabela de atados e importa no outro telemóvel (por exemplo enviando o texto por WhatsApp).</div><textarea id="xfer" rows="4" style="width:100%;box-sizing:border-box" placeholder="O código aparece aqui. Para importar, cola-o aqui."></textarea><button data-a="xexp">Exportar</button><button data-a="ximp">Importar</button><div id="xmsg" class="m"></div></div></div>
+<div class="card"><b>Copiar para outro telemóvel</b><div class="m">Exporta as correções da tabela de atados e importa no outro telemóvel (por exemplo enviando o texto por WhatsApp). As localizações vêm do ficheiro localizacoes.txt do GitHub.</div><textarea id="xfer" rows="4" style="width:100%;box-sizing:border-box" placeholder="O código aparece aqui. Para importar, cola-o aqui."></textarea><button data-a="xexp">Exportar</button><button data-a="ximp">Importar</button><div id="xmsg" class="m"></div></div></div>
 <div id="scrDb" style="display:none"></div>
 <div id="scrLoc" style="display:none"></div>
 <div id="scrMap" style="display:none">
@@ -165,20 +165,21 @@ var SC={menu:'menu',cm:'scrCm',map:'scrMap',mapm:'scrMap',man:'scrMan',dbm:'scrD
 function nav(x){MODE=(x=='mapm'||x=='man')?'man':'auto';['menu','scrCm','scrMap','scrMan','scrDbm','scrDb','scrLoc'].forEach(function(i){G(i).style.display=i==SC[x]?'block':'none'});G('bar').style.display=x=='menu'?'none':'block';var b=G('bkb'),t=BK[x]||'menu';b.setAttribute('data-nav',t);b.textContent=BL[t];
 if(x=='map'||x=='mapm'){var m=MODE=='man';G('go').style.display=m?'none':'inline-block';G('out').style.display=m?'none':'block';G('LC').style.display=m?'none':'block';G('gom').style.display=m?'block':'none';rl()}
 if(x=='db')dbr();if(x=='loc')locr();if(x=='man')mr();window.scrollTo(0,0)}
-function locr(){lwInit();var cur=(G('lsel')&&WH.indexOf(G('lsel').value)>=0)?G('lsel').value:WH[0],L=S.lw[cur],h='<div class="card"><h2 style="text-align:center">LOCALIZAÇÕES</h2><label>Armazém <select id="lsel" data-a="lsel">'+WH.map(function(w){return '<option'+(w==cur?' selected':'')+'>'+w+'</option>'}).join('')+'</select></label><div class="m">'+L.length+' localizações guardadas. As que adicionares passam a ser reconhecidas na leitura do mapa.</div>';
-L.forEach(function(c){h+='<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><b style="font-size:17px;flex:1">'+c+'</b><button data-a="ldel" data-c="'+c+'">✕</button></div>'});
+function locr(){lwInit();var cur=(G('lsel')&&WH.indexOf(G('lsel').value)>=0)?G('lsel').value:WH[0],L=S.lw[cur],fd=function(t){return new Date(t).toLocaleString('pt-PT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})},
+st=S.lwOk?'Lista atualizada do ficheiro localizacoes.txt ('+fd(S.lwAt)+')'+(S.lwBad?' · '+S.lwBad+' entrada(s) ignorada(s): confere o ficheiro':''):(S.lwAt?'Sem acesso ao ficheiro: a usar a cópia guardada de '+fd(S.lwAt):'Sem acesso ao ficheiro: a usar a lista de origem'),
+h='<div class="card"><h2 style="text-align:center">LOCALIZAÇÕES</h2><label>Armazém <select id="lsel" data-a="lsel">'+WH.map(function(w){return '<option'+(w==cur?' selected':'')+'>'+w+'</option>'}).join('')+'</select></label><div class="m">'+L.length+' localizações neste armazém.</div>';
+L.forEach(function(c){h+='<div style="margin:4px 0"><b style="font-size:17px">'+c+'</b></div>'});
 if(!L.length)h+='<div class="m">Ainda não há localizações neste armazém.</div>';
-G('scrLoc').innerHTML=h+'<button class="p big" data-a="ladd">Adicionar localização +</button><button data-a="lreset">Repor localizações originais</button></div>'}
+G('scrLoc').innerHTML=h+'<div class="m" style="margin-top:10px">'+st+'</div><button class="p big" data-a="lrefresh">Atualizar agora</button><div class="m">Para acrescentar ou mudar localizações, edita o ficheiro <b>localizacoes.txt</b> no repositório do GitHub (Cargas), faz Commit e toca em «Atualizar agora». Pode demorar uns minutos a aparecer.</div></div>'}
 function xfer(a){var ta=G('xfer'),m=G('xmsg');lwInit();
-if(a=='xexp'){var c='CARGA1:'+btoa(unescape(encodeURIComponent(JSON.stringify({lw:S.lw,dbe:S.dbe,known:S.known}))));ta.value=c;ta.focus();ta.select();var fb='Seleciona o texto, copia e cola no outro telemóvel.';try{navigator.clipboard.writeText(c).then(function(){m.textContent='Copiado. Cola no outro telemóvel (WhatsApp, etc.) e usa Importar.'},function(){m.textContent=fb})}catch(e){m.textContent=fb}return}
+if(a=='xexp'){var c='CARGA1:'+btoa(unescape(encodeURIComponent(JSON.stringify({dbe:S.dbe,known:S.known}))));ta.value=c;ta.focus();ta.select();var fb='Seleciona o texto, copia e cola no outro telemóvel.';try{navigator.clipboard.writeText(c).then(function(){m.textContent='Copiado. Cola no outro telemóvel (WhatsApp, etc.) e usa Importar.'},function(){m.textContent=fb})}catch(e){m.textContent=fb}return}
 var v=(ta.value||'').replace(/\s+/g,'');if(v.indexOf('CARGA1:')!=0){m.textContent='Cola primeiro o código exportado (começa por CARGA1:).';return}
 var d;try{d=JSON.parse(decodeURIComponent(escape(atob(v.slice(7)))))}catch(e){m.textContent='Código inválido ou incompleto.';return}
-if(!d||typeof d.lw!='object'||!d.lw){m.textContent='Código inválido.';return}
-if(!confirm('Importar? Isto substitui as localizações e as correções da tabela de atados deste telemóvel.'))return;
-var o={},n=0,k;WH.forEach(function(w){o[w]=(Array.isArray(d.lw[w])?d.lw[w]:[]).filter(function(c){return typeof c=='string'&&/^[A-Z0-9]{4,7}$/.test(c)});n+=o[w].length});
-S.lw=o;if(d.dbe&&typeof d.dbe=='object'){S.dbe={};for(k in d.dbe)if(typeof d.dbe[k]=='string')S.dbe[k]=d.dbe[k]}
+if(!d||typeof d!='object'||(!d.dbe&&!d.known)){m.textContent='Código inválido.';return}
+if(!confirm('Importar? Isto substitui as correções da tabela de atados deste telemóvel.'))return;
+var k;if(d.dbe&&typeof d.dbe=='object'){S.dbe={};for(k in d.dbe)if(typeof d.dbe[k]=='string')S.dbe[k]=d.dbe[k]}
 if(Array.isArray(d.known))d.known.forEach(function(c){if(typeof c=='string'&&/^[A-Z0-9]{4,7}$/.test(c)&&S.known.indexOf(c)<0)S.known.push(c)});
-syncKnown();sv();m.textContent='Importado: '+n+' localizações e '+Object.keys(S.dbe).length+' correções da tabela.'}
+syncKnown();sv();m.textContent='Importado: '+Object.keys(S.dbe).length+' correções da tabela.'}
 
 var MSEL=null;
 function mInit(){if(!S.man||!S.man.lay)S.man={lay:[{off:null,rows:[]},{off:null,rows:[]}],rot:{}};if(!S.man.rot)S.man.rot={}}
@@ -244,11 +245,12 @@ else if(a=='M_addlay'){ly.push({off:null,rows:[]})}
 else if(a=='M_dellay'){var dl=gl('data-l');if(ly.length>2&&!ly[dl].rows.length)ly.splice(dl,1)}
 else if(a=='M_clear'){if(confirm('Limpar toda a carga manual e voltar a pôr os atados na lista?')){S.man=null;MSEL=null;mInit()}}
 mr()}
-function locAct(a,t){var cur=G('lsel').value;
-if(a=='ladd'){var v=prompt('Nova localização em '+cur+' (ex.: F01B11):');if(v===null)return;v=v.toUpperCase().replace(/[^A-Z0-9]/g,'');var er='';if(v.length<4||v.length>7)er='Código inválido: usa 4 a 7 letras ou números.';else{var w=WH.filter(function(x){return S.lw[x].indexOf(v)>=0})[0];if(w)er=v+' já existe em '+w+'.'}
-if(er){alert(er);return}S.lw[cur].push(v);S.lw[cur].sort();S.known=S.known.filter(function(x){return x!=v});syncKnown();sv();locr()}
-else if(a=='ldel'){var c=t.getAttribute('data-c');if(confirm('Apagar '+c+' de '+cur+'?')){S.lw[cur]=S.lw[cur].filter(function(x){return x!=c});syncKnown();sv();locr()}}
-else if(a=='lreset'){if(confirm('Repor as localizações originais? Perdes as que adicionaste.')){S.lw=null;syncKnown();sv();locr()}}}
+function parseLoc(t){var o={},seen={},bad=0,n=0;WH.forEach(function(w){o[w]=[]});
+String(t).split(/\r?\n/).forEach(function(ln){ln=ln.replace(/#.*$/,'').trim();if(!ln)return;var i=ln.indexOf(':');if(i<0){bad++;return}var nm0=ln.slice(0,i).trim().toLowerCase(),w=WH.filter(function(x){return x.toLowerCase()==nm0})[0];if(!w){bad++;return}
+ln.slice(i+1).split(/[\s,;]+/).forEach(function(c){c=c.toUpperCase();if(!c)return;if(!/^[A-Z0-9]{4,7}$/.test(c)||seen[c]){bad++;return}seen[c]=1;o[w].push(c);n++})});
+return{lw:o,n:n,bad:bad}}
+function loadLoc(manual){if(!window.fetch)return;
+fetch('localizacoes.txt?v='+Date.now(),{cache:'no-store'}).then(function(r){if(!r.ok)throw 0;return r.text()}).then(function(t){var q=parseLoc(t);if(!q.n)throw 1;S.lw=q.lw;S.lwAt=Date.now();S.lwBad=q.bad;S.lwOk=true;syncKnown();sv();if(G('scrLoc').style.display=='block')locr()}).catch(function(){S.lwOk=false;sv();if(G('scrLoc').style.display=='block')locr()})}
 function dbr(){var cur=(G('dsel')&&DB[G('dsel').value])?G('dsel').value:'40x40',h='<div class="card"><div class="m">Peças por atado e configuração B×A para cada espessura (mm). Toca num valor para o corrigir (ex.: 32 4x8; vazio = sem configuração). Valores corrigidos ficam com a margem verde. Lidos de fotos da tabela MTM 130: os tubos redondos são os menos certos, confirma. Nos redondos o atado é um hexágono: B = tubos na fila mais estreita, A = na mais larga.</div><label>Medida <select id="dsel" data-a="dsel">'+Object.keys(DB).map(function(k){return '<option value="'+k+'"'+(k==cur?' selected':'')+'>'+(k.indexOf('x')<0?'Ø'+k:k)+'</option>'}).join('')+'</select></label>';
 [0,1].forEach(function(li){h+='<h2>'+(li?12:6)+' m</h2><div class="tb"><table><tr>'+COLS.map(function(c){return '<th>'+c+'</th>'}).join('')+'</tr><tr>'+[0,1,2,3,4,5].map(function(c){var k=cur+'|'+li+'|'+c;return '<td><input class="dc" style="width:76px'+(S.dbe[k]!==undefined?';border-color:var(--ok)':'')+'" data-k="'+k+'" value="'+cell(cur,li,c).replace('/',' ')+'"></td>'}).join('')+'</tr></table></div>'});
 G('scrDb').innerHTML=h+'<button data-a="dbreset">Repor tabela original</button></div>'}
@@ -352,7 +354,7 @@ rl()});
 document.addEventListener('click',function(e){var t=e.target,a=t.getAttribute&&t.getAttribute('data-a'),id=t.getAttribute&&t.getAttribute('data-id');
 if(t.getAttribute&&t.getAttribute('data-nav')){nav(t.getAttribute('data-nav'));return}
 if(id){S.done[id]=!S.done[id];sv();draw();return}
-if(a&&a.indexOf('M_')==0){mact(a,t);return}if(a=='xexp'||a=='ximp'){xfer(a);return}if(a=='ladd'||a=='ldel'||a=='lreset'){locAct(a,t);return}if(!a)return;if(a=='qpick'){qform(t.getAttribute('data-k'));return}if(a=='qadd'){qadd(t.getAttribute('data-k'));return}if(a=='dbreset'){if(confirm('Repor todos os valores originais da tabela?')){S.dbe={};sv();dbr()}return}
+if(a&&a.indexOf('M_')==0){mact(a,t);return}if(a=='xexp'||a=='ximp'){xfer(a);return}if(a=='lrefresh'){loadLoc(true);return}if(!a)return;if(a=='qpick'){qform(t.getAttribute('data-k'));return}if(a=='qadd'){qadd(t.getAttribute('data-k'));return}if(a=='dbreset'){if(confirm('Repor todos os valores originais da tabela?')){S.dbe={};sv();dbr()}return}
 var l=find(t.getAttribute('data-i'));
 if(a=='del'&&l)S.lines=S.lines.filter(function(x){return x!==l});
 else if(a=='loc'&&l){var v=t.getAttribute('data-v');if(v=='*'){l.both=true;spFix(l)}else{l.both=false;l.loc=v;l.locBad=!isLoc(v)}}
@@ -412,6 +414,6 @@ function draw(){for(var i=0;i<window.PL.n;i++)G('s'+i).innerHTML=svg(i)}
 function zv(){return S.zoom||(innerWidth<700?Math.max(120,innerWidth-28):260)}
 document.addEventListener('input',function(e){if(e.target.id=='cr1'||e.target.id=='cr2'){var u=e.target.id=='cr1';CR.a=+G('cr1').value;CR.b=+G('cr2').value;if(CR.b-CR.a<10){if(u)CR.a=CR.b-10;else CR.b=CR.a+10;G('cr1').value=CR.a;G('cr2').value=CR.b}G('cv1').style.height=CR.a+'%';G('cv2').style.height=(100-CR.b)+'%';return}if(e.target.id=='q')qs(e.target.value);if(e.target.id=='zm'||e.target.id=='zmm'){S.zoom=+e.target.value;document.documentElement.style.setProperty('--sw',S.zoom+'px');sv()}});
 document.documentElement.style.setProperty('--sw',zv()+'px');
-G('go').onclick=go;rl();nav('menu');
+G('go').onclick=go;rl();nav('menu');loadLoc();
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(function(){});
 </script></body></html>
